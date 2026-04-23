@@ -23,66 +23,46 @@ st.set_page_config(
 st.markdown("""
 <style>
 
-/* Fuente global */
-html, body, [class*="css"] {
-    font-family: Inter, sans-serif;
-}
-
-/* Fondo */
-.stApp {
-    background-color: #F5F7FA;
-}
-
-/* Contenedor principal */
-.block-container {
-    padding-top: 2rem;
-    max-width: 1200px;
-}
-
-/* SIDEBAR */
-section[data-testid="stSidebar"] {
-    background-color: #111827;
-}
-section[data-testid="stSidebar"] * {
-    color: #E5E7EB !important;
-}
-
-/* BOTONES (importante override real) */
-div.stButton > button {
-    background-color: #111827 !important;
-    color: white !important;
-    border-radius: 8px !important;
-    border: none;
-}
-
-/* CARDS */
-.custom-card {
+.place-card {
     background: white;
-    border-radius: 12px;
-    padding: 16px;
-    margin-bottom: 12px;
-    border: 1px solid #E5E7EB;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+    border-radius: 16px;
+    padding: 1.2rem 1.4rem;
+    margin-bottom: 1rem;
+    border-left: 4px solid #E8C547;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.05);
+
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
 }
 
-/* TITULOS */
-.card-title {
-    font-weight: 600;
-    font-size: 16px;
-    color: #111827;
+.place-content {
+    flex: 1;
 }
 
-/* META */
-.card-meta {
-    font-size: 12px;
-    color: #6B7280;
+.place-actions {
+    display: flex;
+    align-items: center;
 }
 
-/* DESCRIPCION */
-.card-desc {
-    font-size: 13px;
-    color: #4B5563;
-    margin-top: 6px;
+/* Botón dentro de la card */
+.place-actions button {
+    background: #1A1A2E !important;
+    color: #E8C547 !important;
+    border-radius: 8px !important;
+    font-size: 0.8rem;
+    padding: 0.4rem 0.6rem;
+    width: auto !important;
+}
+
+/* Mejor espaciado */
+.place-card h4 {
+    margin-bottom: 4px;
+}
+
+.place-card .meta {
+    margin-bottom: 6px;
 }
 
 </style>
@@ -979,21 +959,64 @@ with tab_planning:
                 f'<a href="{maps_url}" target="_blank" rel="noopener">🗺️ Ver en Google Maps</a>'
                 f'</div>'
             )
-            st.markdown(
-                f'<div class="place-card">'
-                f'{hora_html}'
-                f'<h4>{act["nombre"]}</h4>'
-                f'<div class="meta">📍 {act["direccion"]} &nbsp;|&nbsp; {n_rev}</div>'
-                f'<span class="badge badge-type">{act["tipo"]}</span>'
-                f'<span class="badge badge-price">{act["precio"]}</span>'
-                f'{horario_badge}'
-                f'<div style="margin-top:8px;">{stars} '
-                f'<span style="color:#888;font-size:0.85rem;">{act["rating"]:.1f}/5</span></div>'
-                f'{desc}'
-                f'{links_html}'
-                f'</div>',
-                unsafe_allow_html=True,
-            )
+            col_card, col_btn = st.columns([10,1])
+
+with col_card:
+    st.markdown(
+        f"""
+        <div class="place-card">
+            
+            <div class="place-content">
+                {hora_html}
+                <h4>{act["nombre"]}</h4>
+                
+                <div class="meta">
+                    📍 {act["direccion"]} &nbsp;|&nbsp; {n_rev}
+                </div>
+
+                <span class="badge badge-type">{act["tipo"]}</span>
+                <span class="badge badge-price">{act["precio"]}</span>
+
+                {horario_badge}
+
+                <div style="margin-top:8px;">
+                    {'⭐' * int(round(act['rating']))}
+                    <span style="color:#888;font-size:0.85rem;">
+                        {act["rating"]:.1f}/5
+                    </span>
+                </div>
+
+                {desc}
+
+                {links_html}
+            </div>
+
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+with col_btn:
+    if st.button(
+        "🔄",
+        key=f"swap_{dia}_{act['place_id']}",
+        help="Cambiar actividad",
+    ):
+        df_nuevo, nombre_nuevo = swap_actividad(
+            st.session_state.df_plan,
+            st.session_state.df_todos,
+            act['place_id'],
+        )
+        if df_nuevo is None:
+            st.warning(f"No hay más lugares disponibles de tipo {act['tipo']}.")
+        else:
+            fi = st.session_state.fechas_res[0] if st.session_state.fechas_res else None
+            hc = st.session_state.hotel_coords_res
+            df_act, descs = asignar_horas_df(df_nuevo, fi, hc)
+            st.session_state.df_plan = df_act
+            st.session_state.descansos_dia = descs
+            st.toast(f"Cambiado por «{nombre_nuevo}»", icon="🔄")
+            st.rerun()
 
             with st.expander(f"Más detalles de {act['nombre']}"):
                 with st.spinner("Cargando detalles..."):
