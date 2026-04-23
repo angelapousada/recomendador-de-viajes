@@ -3,6 +3,9 @@ import requests
 import pandas as pd
 import folium
 from streamlit_folium import st_folium
+from streamlit_searchbox import st_searchbox
+from datetime import date, timedelta
+from math import radians, cos, sin, asin, sqrt
 import time
 import math
 
@@ -130,29 +133,65 @@ def get_headers(field_mask):
     }
 
 @st.cache_data(ttl=600, show_spinner=False)
-def autocompletar_ciudad(texto):
+def _autocompletar(texto, tipos_tuple=None, bias_lat=None, bias_lng=None):
     if not texto or len(texto.strip()) < 2 or not API_KEY:
         return []
+    body = {'input': texto, 'languageCode': 'es'}
+    if tipos_tuple:
+        body['includedPrimaryTypes'] = list(tipos_tuple)
+    if bias_lat is not None and bias_lng is not None:
+        body['locationBias'] = {
+            'circle': {
+                'center': {'latitude': bias_lat, 'longitude': bias_lng},
+                'radius': 30000.0,
+            }
+        }
     try:
         r = requests.post(
             AUTOCOMPLETE_URL,
             headers={'Content-Type': 'application/json', 'X-Goog-Api-Key': API_KEY},
-            json={
-                'input': texto,
-                'includedPrimaryTypes': ['(cities)'],
-                'languageCode': 'es',
-            },
+            json=body,
             timeout=5,
         )
         data = r.json()
     except Exception:
         return []
-    sugerencias = []
+    out = []
     for s in data.get('suggestions', []):
         pp = s.get('placePrediction')
         if pp:
-            sugerencias.append(pp.get('text', {}).get('text', ''))
-    return [s for s in sugerencias if s]
+            txt = pp.get('text', {}).get('text', '')
+            if txt:
+                out.append(txt)
+    return out
+
+def buscar_ciudades(texto):
+    return _autocompletar(texto, tipos_tuple=('(cities)',))
+
+def hacer_buscador_hoteles(lat, lng):
+    def _buscar(texto):
+        return _autocompletar(texto, bias_lat=lat, bias_lng=lng)
+    return _buscar
+
+def haversine(lat1, lng1, lat2, lng2):
+    if None in (lat1, lng1, lat2, lng2):
+        return float('inf')
+    R = 6371.0
+    dlat = radians(lat2 - lat1)
+    dlng = radians(lng2 - lng1)
+    a = sin(dlat/2)**2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlng/2)**2
+    return 2 * R * asin(sqrt(a))
+
+def abierto_en_fechas(periods, fechas):
+    """True si el lugar está abierto al menos un día del viaje, o si no hay datos."""
+    if not periods:
+        return True
+    dias_google = {(f.weekday() + 1) % 7 for f in fechas}
+    for p in periods:
+        dia_abierto = p.get('open', {}).get('day')
+        if dia_abierto in dias_google:
+            return True
+    return False
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def obtener_coords(ciudad):
@@ -185,8 +224,8 @@ def buscar_lugares(lat, lng, tipo_google, radio_m):
         'places.id', 'places.displayName', 'places.rating',
         'places.userRatingCount', 'places.priceLevel',
         'places.formattedAddress', 'places.location',
-        'places.currentOpeningHours', 'places.primaryType',
-        'places.editorialSummary'
+        'places.currentOpeningHours', 'places.regularOpeningHours',
+        'places.primaryType', 'places.editorialSummary',
     ])
     r    = requests.post(NEARBY_URL, headers=get_headers(field_mask), json=body, timeout=10)
     data = r.json()
@@ -210,20 +249,117 @@ def obtener_detalles(place_id):
 
 def extraer(lugar, tipo_nombre):
     pk = lugar.get('priceLevel')
+    periods = (lugar.get('regularOpeningHours') or {}).get('periods') or []
     return {
-        'place_id':    lugar.get('id', ''),
-        'nombre':      lugar.get('displayName', {}).get('text', ''),
-        'tipo':        tipo_nombre,
-        'rating':      lugar.get('rating'),
-        'n_reviews':   lugar.get('userRatingCount', 0),
-        'precio':      PRECIO_LABEL.get(pk, '❓ Desconocido'),
-        'precio_num':  PRECIO_NUM.get(pk),
-        'direccion':   lugar.get('formattedAddress', ''),
-        'lat':         lugar.get('location', {}).get('latitude'),
-        'lng':         lugar.get('location', {}).get('longitude'),
-        'abierto':     lugar.get('currentOpeningHours', {}).get('openNow'),
-        'descripcion': lugar.get('editorialSummary', {}).get('text', ''),
+        'place_id':        lugar.get('id', ''),
+        'nombre':          lugar.get('displayName', {}).get('text', ''),
+        'tipo':            tipo_nombre,
+        'rating':          lugar.get('rating'),
+        'n_reviews':       lugar.get('userRatingCount', 0),
+        'precio':          PRECIO_LABEL.get(pk, '❓ Desconocido'),
+        'precio_num':      PRECIO_NUM.get(pk),
+        'direccion':       lugar.get('formattedAddress', ''),
+        'lat':             lugar.get('location', {}).get('latitude'),
+        'lng':             lugar.get('location', {}).get('longitude'),
+        'abierto':         lugar.get('currentOpeningHours', {}).get('openNow'),
+        'descripcion':     lugar.get('editorialSummary', {}).get('text', ''),
+        'opening_periods': periods,
     }
+
+TIPO_RESTAURANTE = '🍽️ Restaurantes'
+
+def asignar_planning(df_f, dias, act_por_dia, hotel_coords, regimen):
+    """Construye el planning día a día, sin repetir tipo y respetando el régimen.
+    Las actividades de cada día se eligen cerca del hotel si existe, o cerca
+    entre sí (usando la primera actividad del día como ancla) si no."""
+    if df_f.empty:
+        return df_f.assign(dia=[])
+
+    if regimen == 'Pensión completa':
+        df_f = df_f[df_f['tipo'] != TIPO_RESTAURANTE]
+        max_rest = 0
+    elif regimen == 'Media pensión':
+        max_rest = max(1, dias // 2)
+    else:
+        max_rest = dias  # sin restricción extra: la exclusividad de tipo ya limita a 1/día
+
+    df_f = df_f.sort_values('rating', ascending=False).reset_index(drop=True)
+    used = set()
+    rest_count = 0
+    asignaciones = []  # (idx_df, dia)
+
+    def puede_coger(row):
+        return not (row['tipo'] == TIPO_RESTAURANTE and rest_count >= max_rest)
+
+    for dia in range(1, dias + 1):
+        # Ancla del día: la mejor puntuación disponible
+        anchor = None
+        for i, row in df_f.iterrows():
+            if i in used: continue
+            if not puede_coger(row): continue
+            anchor = i
+            break
+        if anchor is None:
+            break
+
+        tipos_dia = {df_f.at[anchor, 'tipo']}
+        seleccion = [anchor]
+        used.add(anchor)
+        if df_f.at[anchor, 'tipo'] == TIPO_RESTAURANTE:
+            rest_count += 1
+
+        if hotel_coords:
+            a_lat, a_lng = hotel_coords
+        else:
+            a_lat, a_lng = df_f.at[anchor, 'lat'], df_f.at[anchor, 'lng']
+
+        # Candidatos restantes con score mixto (rating + cercanía)
+        scored = []
+        for i, row in df_f.iterrows():
+            if i in used: continue
+            if row['tipo'] in tipos_dia: continue
+            if not puede_coger(row): continue
+            dist = haversine(a_lat, a_lng, row['lat'], row['lng'])
+            score = (row['rating'] or 0) - 0.15 * dist
+            scored.append((score, i))
+        scored.sort(reverse=True)
+
+        for _, i in scored:
+            if len(seleccion) >= act_por_dia:
+                break
+            tipo_i = df_f.at[i, 'tipo']
+            if tipo_i in tipos_dia:
+                continue
+            if not puede_coger(df_f.loc[i]):
+                continue
+            seleccion.append(i)
+            tipos_dia.add(tipo_i)
+            used.add(i)
+            if tipo_i == TIPO_RESTAURANTE:
+                rest_count += 1
+
+        # Si no llegamos al objetivo por falta de tipos distintos, relajamos la regla
+        if len(seleccion) < act_por_dia:
+            for i, row in df_f.iterrows():
+                if len(seleccion) >= act_por_dia: break
+                if i in used: continue
+                if not puede_coger(row): continue
+                seleccion.append(i)
+                used.add(i)
+                if row['tipo'] == TIPO_RESTAURANTE:
+                    rest_count += 1
+
+        for i in seleccion:
+            asignaciones.append((i, dia))
+
+    if not asignaciones:
+        return df_f.iloc[0:0].assign(dia=pd.Series(dtype=int))
+
+    indices = [i for i, _ in asignaciones]
+    dias_col = [d for _, d in asignaciones]
+    df_plan = df_f.loc[indices].copy()
+    df_plan['dia'] = dias_col
+    return df_plan.reset_index(drop=True)
 
 # ─────────────────────────────────────────────
 #  SESSION STATE — persiste el planning entre rerenders
@@ -231,7 +367,9 @@ def extraer(lugar, tipo_nombre):
 for key, default in {
     'df_plan': None, 'df_todos': None,
     'ciudad_resultado': None, 'coords': (None, None),
-    'dias_res': 3, 'act_por_dia_res': 3
+    'dias_res': 3, 'act_por_dia_res': 3,
+    'fechas_res': None, 'hotel_res': None, 'regimen_res': 'Solo alojamiento',
+    'coords_ciudad': (None, None),
 }.items():
     if key not in st.session_state:
         st.session_state[key] = default
@@ -247,24 +385,53 @@ with st.sidebar:
         st.error("⚠️ Añade GOOGLE_API_KEY en Settings → Secrets")
 
     st.markdown("### 📍 Destino")
-    ciudad_txt = st.text_input("Ciudad", placeholder="Madrid, París, Roma...")
-    ciudad = ciudad_txt.strip() if ciudad_txt else ""
-    if ciudad and len(ciudad) >= 2:
-        sugerencias = autocompletar_ciudad(ciudad)
-        if sugerencias:
-            ciudad = st.selectbox(
-                "Sugerencias",
-                options=sugerencias,
-                index=0,
-                key="ciudad_sug",
-            )
+    ciudad = st_searchbox(
+        buscar_ciudades,
+        key="ciudad_sb",
+        placeholder="Madrid, París, Roma...",
+        label="Ciudad",
+        clear_on_submit=False,
+    )
 
-    st.markdown("### 📅 Viaje")
-    col1, col2 = st.columns(2)
-    with col1:
-        dias = st.number_input("Días", min_value=1, max_value=14, value=3)
-    with col2:
-        act_por_dia = st.number_input("Act/día", min_value=1, max_value=6, value=3)
+    # Coords de la ciudad (para sesgar hoteles al escribir)
+    lat_ciudad = lng_ciudad = None
+    if ciudad and API_KEY:
+        lat_ciudad, lng_ciudad, _ = obtener_coords(ciudad)
+        if lat_ciudad is not None:
+            st.session_state.coords_ciudad = (lat_ciudad, lng_ciudad)
+
+    st.markdown("### 🏨 Alojamiento (opcional)")
+    hotel = st_searchbox(
+        hacer_buscador_hoteles(lat_ciudad, lng_ciudad),
+        key="hotel_sb",
+        placeholder="Nombre del hotel o dirección…",
+        label="Hotel / dirección",
+        clear_on_submit=False,
+    )
+    regimen = st.radio(
+        "Régimen",
+        options=['Solo alojamiento', 'Media pensión', 'Pensión completa'],
+        index=0,
+        horizontal=False,
+    )
+
+    st.markdown("### 📅 Fechas del viaje")
+    hoy = date.today()
+    fechas_sel = st.date_input(
+        "Rango",
+        value=(hoy, hoy + timedelta(days=2)),
+        min_value=hoy,
+    )
+    if isinstance(fechas_sel, (tuple, list)) and len(fechas_sel) == 2:
+        fecha_ini, fecha_fin = fechas_sel
+    elif isinstance(fechas_sel, (tuple, list)) and len(fechas_sel) == 1:
+        fecha_ini = fecha_fin = fechas_sel[0]
+    else:
+        fecha_ini = fecha_fin = fechas_sel
+    dias = (fecha_fin - fecha_ini).days + 1
+    st.caption(f"🗓️ {dias} día(s) de viaje")
+
+    act_por_dia = st.number_input("Actividades por día", min_value=1, max_value=6, value=3)
 
     st.markdown("### 💰 Presupuesto")
     PRESUPUESTO_RANGOS = {
@@ -315,20 +482,31 @@ if buscar:
         st.error("⚠️ Falta la API Key.")
         st.stop()
     if not ciudad:
-        st.error("⚠️ Escribe una ciudad de destino.")
+        st.error("⚠️ Elige una ciudad de destino.")
         st.stop()
 
     with st.spinner(f"🔍 Buscando los mejores sitios en {ciudad}..."):
-        lat, lng, nombre_ciudad = obtener_coords(ciudad)
+        lat_c, lng_c, nombre_ciudad = obtener_coords(ciudad)
 
-    if lat is None:
+    if lat_c is None:
         st.error(f"❌ No se pudo encontrar: {nombre_ciudad}")
         st.stop()
+
+    # Si hay hotel, sus coords son el centro de búsqueda; si no, la ciudad.
+    hotel_coords = None
+    if hotel:
+        h_lat, h_lng, _ = obtener_coords(hotel)
+        if h_lat is not None:
+            hotel_coords = (h_lat, h_lng)
+    centro = hotel_coords or (lat_c, lng_c)
+
+    # Lista de fechas del viaje
+    fechas_viaje = [fecha_ini + timedelta(days=i) for i in range(dias)]
 
     todos    = []
     progress = st.progress(0, text="Consultando la API...")
     for i, tipo_nombre in enumerate(gustos):
-        lugares, err = buscar_lugares(lat, lng, TIPOS_GOOGLE[tipo_nombre], radio_km * 1000)
+        lugares, err = buscar_lugares(centro[0], centro[1], TIPOS_GOOGLE[tipo_nombre], radio_km * 1000)
         if err:
             st.warning(f"⚠️ Error buscando {tipo_nombre}: {err}")
         for l in lugares:
@@ -341,10 +519,14 @@ if buscar:
         st.error("❌ No se encontraron lugares.")
         st.stop()
 
-    df   = pd.DataFrame(todos)
+    df = pd.DataFrame(todos)
+    df['abierto_en_fechas'] = df['opening_periods'].apply(
+        lambda p: abierto_en_fechas(p, fechas_viaje)
+    )
     df_f = df[
         (df['rating'].notna()) &
         (df['rating'] >= rating_min) &
+        df['abierto_en_fechas'] &
         (
             (df['precio_num'].isna()) |
             (presupuesto_max is None) |
@@ -352,17 +534,18 @@ if buscar:
         )
     ].drop_duplicates(subset='nombre').sort_values('rating', ascending=False).reset_index(drop=True)
 
-    total   = dias * act_por_dia
-    df_plan = df_f.head(total).copy()
-    df_plan['dia'] = [math.floor(i / act_por_dia) + 1 for i in range(len(df_plan))]
+    df_plan = asignar_planning(df_f, dias, act_por_dia, hotel_coords, regimen)
 
     # Guardar todo en session_state
     st.session_state.df_plan          = df_plan
     st.session_state.df_todos         = df_f
     st.session_state.ciudad_resultado = nombre_ciudad
-    st.session_state.coords           = (lat, lng)
+    st.session_state.coords           = centro
     st.session_state.dias_res         = dias
     st.session_state.act_por_dia_res  = act_por_dia
+    st.session_state.fechas_res       = (fecha_ini, fecha_fin)
+    st.session_state.hotel_res        = hotel if hotel else None
+    st.session_state.regimen_res      = regimen
 
 # ─────────────────────────────────────────────
 #  MOSTRAR RESULTADOS (siempre desde session_state)
@@ -391,6 +574,19 @@ if len(df_plan) == 0:
 
 # Stats
 st.markdown(f"## 📍 {nombre_ciudad}")
+fechas_res = st.session_state.get('fechas_res')
+hotel_res  = st.session_state.get('hotel_res')
+regimen_res = st.session_state.get('regimen_res', 'Solo alojamiento')
+subline = []
+if fechas_res:
+    fi, ff = fechas_res
+    subline.append(f"🗓️ {fi.strftime('%d %b %Y')} → {ff.strftime('%d %b %Y')}")
+if hotel_res:
+    subline.append(f"🏨 {hotel_res}")
+subline.append(f"🍽️ {regimen_res}")
+if subline:
+    st.caption("  ·  ".join(subline))
+
 c1, c2, c3, c4 = st.columns(4)
 with c1:
     st.markdown(f'<div class="stat-box"><div class="num">{dias_res}</div><div class="lbl">Días de viaje</div></div>', unsafe_allow_html=True)
@@ -407,11 +603,17 @@ tab_planning, tab_mapa, tab_explorar = st.tabs(["📅 Planning", "🗺️ Mapa",
 
 # ── TAB 1: PLANNING ──────────────────────────
 with tab_planning:
+    fecha_ini_res = fechas_res[0] if fechas_res else None
     for dia in range(1, dias_res + 1):
         acts = df_plan[df_plan['dia'] == dia]
         if acts.empty:
             continue
-        st.markdown(f'<div class="day-header">Día {dia}</div>', unsafe_allow_html=True)
+        if fecha_ini_res:
+            fecha_dia = fecha_ini_res + timedelta(days=dia - 1)
+            encabezado = f'Día {dia} · {fecha_dia.strftime("%a %d %b %Y").capitalize()}'
+        else:
+            encabezado = f'Día {dia}'
+        st.markdown(f'<div class="day-header">{encabezado}</div>', unsafe_allow_html=True)
         for _, act in acts.iterrows():
             abierto_badge = ""
             if act['abierto'] is True:
@@ -461,6 +663,13 @@ with tab_planning:
 # ── TAB 2: MAPA ──────────────────────────────
 with tab_mapa:
     mapa = folium.Map(location=[lat, lng], zoom_start=13, tiles='CartoDB positron')
+    if hotel_res:
+        folium.Marker(
+            location=[lat, lng],
+            popup=folium.Popup(f"<b>🏨 {hotel_res}</b>", max_width=260),
+            tooltip=f"Alojamiento: {hotel_res}",
+            icon=folium.Icon(color='black', icon='home', prefix='glyphicon'),
+        ).add_to(mapa)
     for dia in range(1, dias_res + 1):
         grupo = folium.FeatureGroup(name=f'Día {dia}')
         color = COLORES_DIA[(dia - 1) % len(COLORES_DIA)]

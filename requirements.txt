@@ -3,3 +3,4 @@ requests>=2.31.0
 pandas>=2.0.0
 folium>=0.15.0
 streamlit-folium>=0.18.0
+streamlit-searchbox>=0.1.14
