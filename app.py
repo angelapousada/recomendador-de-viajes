@@ -1137,7 +1137,7 @@ with tab_planning:
 
 # ── TAB 2: MAPA ──────────────────────────────
 with tab_mapa:
-    mapa = folium.Map(location=[lat, lng], zoom_start=13, tiles='CartoDB positron')
+    mapa = folium.Map(location=[lat, lng], zoom_start=13)
     if hotel_res:
         folium.Marker(
             location=[lat, lng],
