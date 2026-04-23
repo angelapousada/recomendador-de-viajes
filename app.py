@@ -856,9 +856,11 @@ with st.sidebar:
     )
     if not gustos:
         gustos = list(TIPOS_GOOGLE.keys())
-        
+
+    st.markdown("### Puntuación mínima")
     rating_min = st.slider("Puntuación mínima", 1.0, 5.0, 4.0, 0.1, label_visibility="collapsed")
 
+    st.markdown("### Radio de búsqueda (km)")
     radio_km   = st.slider("Radio de búsqueda", 1, 20, 5, label_visibility="collapsed")
 
     st.markdown("---")
