@@ -79,9 +79,10 @@ h1, h2, h3 { font-family: 'DM Serif Display', serif !important; }
 # ─────────────────────────────────────────────
 #  CONSTANTES
 # ─────────────────────────────────────────────
-NEARBY_URL = 'https://places.googleapis.com/v1/places:searchNearby'
-TEXT_URL   = 'https://places.googleapis.com/v1/places:searchText'
-DETAIL_URL = 'https://places.googleapis.com/v1/places/'
+NEARBY_URL       = 'https://places.googleapis.com/v1/places:searchNearby'
+TEXT_URL         = 'https://places.googleapis.com/v1/places:searchText'
+DETAIL_URL       = 'https://places.googleapis.com/v1/places/'
+AUTOCOMPLETE_URL = 'https://places.googleapis.com/v1/places:autocomplete'
 
 PRECIO_LABEL = {
     'PRICE_LEVEL_FREE':           '🆓 Gratis',
@@ -127,6 +128,31 @@ def get_headers(field_mask):
         'X-Goog-Api-Key': API_KEY,
         'X-Goog-FieldMask': field_mask
     }
+
+@st.cache_data(ttl=600, show_spinner=False)
+def autocompletar_ciudad(texto):
+    if not texto or len(texto.strip()) < 2 or not API_KEY:
+        return []
+    try:
+        r = requests.post(
+            AUTOCOMPLETE_URL,
+            headers={'Content-Type': 'application/json', 'X-Goog-Api-Key': API_KEY},
+            json={
+                'input': texto,
+                'includedPrimaryTypes': ['(cities)'],
+                'languageCode': 'es',
+            },
+            timeout=5,
+        )
+        data = r.json()
+    except Exception:
+        return []
+    sugerencias = []
+    for s in data.get('suggestions', []):
+        pp = s.get('placePrediction')
+        if pp:
+            sugerencias.append(pp.get('text', {}).get('text', ''))
+    return [s for s in sugerencias if s]
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def obtener_coords(ciudad):
@@ -221,7 +247,17 @@ with st.sidebar:
         st.error("⚠️ Añade GOOGLE_API_KEY en Settings → Secrets")
 
     st.markdown("### 📍 Destino")
-    ciudad = st.text_input("Ciudad", placeholder="Madrid, París, Roma...")
+    ciudad_txt = st.text_input("Ciudad", placeholder="Madrid, París, Roma...")
+    ciudad = ciudad_txt.strip() if ciudad_txt else ""
+    if ciudad and len(ciudad) >= 2:
+        sugerencias = autocompletar_ciudad(ciudad)
+        if sugerencias:
+            ciudad = st.selectbox(
+                "Sugerencias",
+                options=sugerencias,
+                index=0,
+                key="ciudad_sug",
+            )
 
     st.markdown("### 📅 Viaje")
     col1, col2 = st.columns(2)
@@ -231,12 +267,19 @@ with st.sidebar:
         act_por_dia = st.number_input("Act/día", min_value=1, max_value=6, value=3)
 
     st.markdown("### 💰 Presupuesto")
+    PRESUPUESTO_RANGOS = {
+        'Hasta 50 €':  1,
+        '50 – 150 €': 2,
+        '150 – 300 €': 3,
+        '300 – 500 €': 4,
+        '+500 €':      None,
+    }
     presupuesto = st.select_slider(
-        "Nivel de gasto",
-        options=['Gratis', 'Económico', 'Moderado', 'Caro', 'Sin límite'],
-        value='Moderado'
+        "Rango de gasto por persona / día",
+        options=list(PRESUPUESTO_RANGOS.keys()),
+        value='150 – 300 €',
     )
-    presupuesto_num = ['Gratis', 'Económico', 'Moderado', 'Caro', 'Sin límite'].index(presupuesto)
+    presupuesto_max = PRESUPUESTO_RANGOS[presupuesto]
 
     st.markdown("### 🎯 Preferencias")
     gustos = st.multiselect(
@@ -304,8 +347,8 @@ if buscar:
         (df['rating'] >= rating_min) &
         (
             (df['precio_num'].isna()) |
-            (presupuesto_num == 4) |
-            (df['precio_num'] <= presupuesto_num)
+            (presupuesto_max is None) |
+            (df['precio_num'] <= presupuesto_max)
         )
     ].drop_duplicates(subset='nombre').sort_values('rating', ascending=False).reset_index(drop=True)
 
@@ -377,17 +420,20 @@ with tab_planning:
                 abierto_badge = '<span class="badge" style="background:#FEE2E2;color:#991B1B;">Cerrado</span>'
             n_rev = f"{int(act['n_reviews']):,} reseñas" if act['n_reviews'] else ""
             desc  = f'<div class="desc">{act["descripcion"]}</div>' if act["descripcion"] else ""
-            st.markdown(f"""
-            <div class="place-card">
-                <h4>{act['nombre']}</h4>
-                <div class="meta">📍 {act['direccion']} &nbsp;|&nbsp; {n_rev}</div>
-                <span class="badge badge-type">{act['tipo']}</span>
-                <span class="badge badge-price">{act['precio']}</span>
-                {abierto_badge}
-                <div style="margin-top:8px;">{'⭐' * int(round(act['rating']))} <span style="color:#888;font-size:0.85rem;">{act['rating']:.1f}/5</span></div>
-                {desc}
-            </div>
-            """, unsafe_allow_html=True)
+            stars = '⭐' * int(round(act['rating']))
+            st.markdown(
+                f'<div class="place-card">'
+                f'<h4>{act["nombre"]}</h4>'
+                f'<div class="meta">📍 {act["direccion"]} &nbsp;|&nbsp; {n_rev}</div>'
+                f'<span class="badge badge-type">{act["tipo"]}</span>'
+                f'<span class="badge badge-price">{act["precio"]}</span>'
+                f'{abierto_badge}'
+                f'<div style="margin-top:8px;">{stars} '
+                f'<span style="color:#888;font-size:0.85rem;">{act["rating"]:.1f}/5</span></div>'
+                f'{desc}'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
 
             with st.expander(f"Ver reviews de {act['nombre']}"):
                 with st.spinner("Cargando reviews..."):
@@ -456,13 +502,16 @@ with tab_explorar:
     for _, row in df_vista.iterrows():
         n_rev = f"{int(row['n_reviews']):,} reseñas" if row['n_reviews'] else ""
         desc  = f'<div class="desc">{row["descripcion"]}</div>' if row["descripcion"] else ""
-        st.markdown(f"""
-        <div class="place-card">
-            <h4>{row['nombre']}</h4>
-            <div class="meta">📍 {row['direccion']} &nbsp;|&nbsp; {n_rev}</div>
-            <span class="badge badge-type">{row['tipo']}</span>
-            <span class="badge badge-price">{row['precio']}</span>
-            <div style="margin-top:8px;">{'⭐' * int(round(row['rating']))} <span style="color:#888;font-size:0.85rem;">{row['rating']:.1f}/5</span></div>
-            {desc}
-        </div>
-        """, unsafe_allow_html=True)
+        stars = '⭐' * int(round(row['rating']))
+        st.markdown(
+            f'<div class="place-card">'
+            f'<h4>{row["nombre"]}</h4>'
+            f'<div class="meta">📍 {row["direccion"]} &nbsp;|&nbsp; {n_rev}</div>'
+            f'<span class="badge badge-type">{row["tipo"]}</span>'
+            f'<span class="badge badge-price">{row["precio"]}</span>'
+            f'<div style="margin-top:8px;">{stars} '
+            f'<span style="color:#888;font-size:0.85rem;">{row["rating"]:.1f}/5</span></div>'
+            f'{desc}'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
