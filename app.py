@@ -321,15 +321,52 @@ def formato_hora(h):
         hh, mm = hh + 1, 0
     return f"{hh:02d}:{mm:02d}"
 
+ROUTES_URL = "https://routes.googleapis.com/directions/v2:computeRoutes"
+
+@st.cache_data(ttl=600)
+def tiempo_distancia_google(lat1, lng1, lat2, lng2):
+    if None in (lat1, lng1, lat2, lng2) or not API_KEY:
+        return 0.0, 0.0  # (horas, km)
+
+    body = {
+        "origin": {
+            "location": {
+                "latLng": {"latitude": lat1, "longitude": lng1}
+            }
+        },
+        "destination": {
+            "location": {
+                "latLng": {"latitude": lat2, "longitude": lng2}
+            }
+        },
+        "travelMode": "WALK",
+        "routingPreference": "TRAFFIC_UNAWARE",
+        "computeAlternativeRoutes": False
+    }
+
+    headers = {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": API_KEY,
+        "X-Goog-FieldMask": "routes.distanceMeters,routes.duration"
+    }
+
+    try:
+        r = requests.post(ROUTES_URL, json=body, headers=headers, timeout=5)
+        data = r.json()
+
+        route = data["routes"][0]
+
+        distancia_km = route["distanceMeters"] / 1000
+        duracion_horas = float(route["duration"].replace("s", "")) / 3600
+
+        return duracion_horas, distancia_km
+
+    except Exception:
+        return 0.0, 0.0
 
 def tiempo_desplazamiento(lat1, lng1, lat2, lng2):
-    """Horas aproximadas entre dos puntos. Siempre a pie (~4.5 km/h)."""
-    if None in (lat1, lng1, lat2, lng2):
-        return 0.0
-    km = haversine(lat1, lng1, lat2, lng2)
-    if km == float('inf'):
-        return 0.0
-    return km / 4.5
+    tiempo, _ = tiempo_distancia_google(lat1, lng1, lat2, lng2)
+    return tiempo
 
 def _weekday_google(f):
     return (f.weekday() + 1) % 7
@@ -445,8 +482,10 @@ def _planificar_dia(grupo_df, fecha_dia, hotel_coords):
 
         # Traslado
         if prev_loc and pd.notna(row.get('lat')) and pd.notna(row.get('lng')):
-            km_tras = haversine(prev_loc[0], prev_loc[1], row['lat'], row['lng'])
-            viaje = tiempo_desplazamiento(prev_loc[0], prev_loc[1], row['lat'], row['lng'])
+            viaje, km_tras = tiempo_distancia_google(
+                prev_loc[0], prev_loc[1],
+                row['lat'], row['lng']
+            )
         else:
             km_tras = 0.0
             viaje = 0.0
