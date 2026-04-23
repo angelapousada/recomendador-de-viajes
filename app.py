@@ -73,6 +73,28 @@ h1, h2, h3, h4 { font-family: 'Inter', sans-serif !important; font-weight: 600; 
 }
 .traslado-line .flecha { color: #6B7280; margin-right: 6px; }
 .traslado-line b { color: #1A1A2E; font-weight: 600; }
+.card-photo {
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    object-fit: cover;
+    border-radius: 12px;
+    display: block;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+}
+.card-photo-placeholder {
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #EAEAF0 0%, #DCDCE6 100%);
+    display: flex; align-items: center; justify-content: center;
+    color: #B0B0B8; font-size: 0.8rem; letter-spacing: 0.05em;
+}
+.card-photo-wrap img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 12px; display: block; }
+.explore-card-photo {
+    width: 100%; aspect-ratio: 4 / 3; object-fit: cover;
+    border-radius: 12px; display: block; margin-bottom: 10px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+}
 .stButton > button {
     background: #1A1A2E !important; color: #FFFFFF !important; border: none !important; border-radius: 10px !important;
     font-weight: 500 !important; font-size: 1rem !important; padding: 0.6rem 1.8rem !important;
@@ -121,7 +143,7 @@ PRECIO_NUM = {
     'PRICE_LEVEL_VERY_EXPENSIVE': 4,
 }
 TIPOS_GOOGLE = {
-    'Atracciones':  'tourist_attraction',
+    'Turismo':  'tourist_attraction',
     'Restaurantes': 'restaurant',
     'Cafeterías':   'cafe',
     'Bares/Pubs':   'bar',
@@ -130,13 +152,13 @@ TIPOS_GOOGLE = {
 }
 COLORES_DIA = ['blue', 'red', 'green', 'purple', 'orange', 'darkblue', 'cadetblue']
 ICONOS_TIPO = {
-    'Atracciones': 'star',       'Restaurantes': 'cutlery',
+    'Turismo': 'star',       'Restaurantes': 'cutlery',
     'Museos':      'book',       'Parques':      'leaf',
     'Ocio':        'fire',
     'Cafeterías':  'glass',      'Bares/Pubs':   'glass',
 }
 TIPO_PESO = {
-    'Atracciones':  1.30,
+    'Turismo':  1.30,
     'Ocio':         1.05,
     'Restaurantes': 1.00,
     'Bares/Pubs':   0.95,
@@ -145,7 +167,7 @@ TIPO_PESO = {
 }
 TIPO_IDEAL_HORAS = {
     'Cafeterías':   [9.5, 11.0, 17.0],
-    'Atracciones':  [10.0, 11.5, 16.0, 17.5],
+    'Turismo':  [10.0, 11.5, 16.0, 17.5],
     'Parques':      [11.0, 16.0],
     'Restaurantes': [13.5, 21.0],
     'Ocio':         [16.0, 18.5, 20.0],
@@ -154,10 +176,10 @@ TIPO_IDEAL_HORAS = {
 HORA_PREF_ORDEN = [
     'Bares/Pubs', 'Restaurantes',
     'Cafeterías', 'Ocio',
-    'Atracciones', 'Parques',
+    'Turismo', 'Parques',
 ]
 TIPO_DURACION = {   # horas
-    'Atracciones':  1.5,
+    'Turismo':  1.5,
     'Ocio':         2.5,
     'Restaurantes': 1.5,
     'Cafeterías':   0.75,
@@ -165,7 +187,7 @@ TIPO_DURACION = {   # horas
     'Parques':      1.0,
 }
 CATEGORIA_TIPO = {
-    'Atracciones':  'cultural',
+    'Turismo':  'cultural',
     'Ocio':         'ocio',
     'Restaurantes': 'comida',
     'Cafeterías':   'comida',
@@ -300,15 +322,13 @@ def formato_hora(h):
     return f"{hh:02d}:{mm:02d}"
 
 def tiempo_desplazamiento(lat1, lng1, lat2, lng2):
-    """Horas aproximadas entre dos puntos. A pie si ≤1.5 km, en coche/metro si no."""
+    """Horas aproximadas entre dos puntos. Siempre a pie (~4.5 km/h)."""
     if None in (lat1, lng1, lat2, lng2):
         return 0.0
     km = haversine(lat1, lng1, lat2, lng2)
     if km == float('inf'):
         return 0.0
-    if km <= 1.5:
-        return km / 4.0          # ~4 km/h andando
-    return km / 25.0 + 0.15      # ~25 km/h + 9 min de margen
+    return km / 4.5
 
 def _weekday_google(f):
     return (f.weekday() + 1) % 7
@@ -432,7 +452,7 @@ def _planificar_dia(grupo_df, fecha_dia, hotel_coords):
         desde_hotel = (prev_idx is None and hotel_coords is not None)
         # Mostramos el traslado si es significativo (≥6 min) o si viene desde el alojamiento
         if viaje >= 0.1 or (desde_hotel and viaje > 0):
-            modo = 'a pie' if km_tras <= 1.5 else 'en coche'
+            modo = 'a pie'
             descansos.append({
                 'kind': 'traslado', 'ini': reloj, 'fin': reloj + viaje,
                 'label': f'{int(round(viaje * 60))} min {modo}',
@@ -590,6 +610,7 @@ def buscar_lugares(lat, lng, tipo_google, radio_m):
         'places.formattedAddress', 'places.location',
         'places.currentOpeningHours', 'places.regularOpeningHours',
         'places.primaryType', 'places.editorialSummary',
+        'places.photos',
     ])
     r    = requests.post(NEARBY_URL, headers=get_headers(field_mask), json=body, timeout=10)
     data = r.json()
@@ -611,9 +632,19 @@ def obtener_detalles(place_id):
     )
     return r.json()
 
+def foto_url(photo_ref, max_w=640, max_h=480):
+    if not photo_ref or not API_KEY:
+        return None
+    return (
+        f"https://places.googleapis.com/v1/{photo_ref}/media"
+        f"?key={API_KEY}&maxWidthPx={max_w}&maxHeightPx={max_h}"
+    )
+
 def extraer(lugar, tipo_nombre):
     pk = lugar.get('priceLevel')
     periods = (lugar.get('regularOpeningHours') or {}).get('periods') or []
+    fotos = lugar.get('photos') or []
+    photo_ref = fotos[0].get('name') if fotos else None
     return {
         'place_id':        lugar.get('id', ''),
         'nombre':          lugar.get('displayName', {}).get('text', ''),
@@ -628,13 +659,14 @@ def extraer(lugar, tipo_nombre):
         'abierto':         lugar.get('currentOpeningHours', {}).get('openNow'),
         'descripcion':     lugar.get('editorialSummary', {}).get('text', ''),
         'opening_periods': periods,
+        'photo_ref':       photo_ref,
     }
 
 TIPO_RESTAURANTE = 'Restaurantes'
 
 def asignar_planning(df_f, dias, act_por_dia, hotel_coords, regimen, fecha_ini=None):
     """Construye el planning día a día sin repetir tipo y respetando el régimen.
-    Prioriza museos y atracciones sobre parques/cafés/bares (TIPO_PESO). Si hay
+    Prioriza museos y Turismo sobre parques/cafés/bares (TIPO_PESO). Si hay
     hotel usa sus coords como ancla estricta; si no, usa como ancla global la
     actividad con mayor rating·peso, para que todo el viaje se agrupe allí.
     Si fecha_ini se indica, filtra por apertura en el weekday de cada día."""
@@ -817,19 +849,20 @@ with st.sidebar:
 
     st.markdown("### Preferencias")
     gustos = st.multiselect(
-        "Activiades a elegir",
         options=list(TIPOS_GOOGLE.keys()),
-        default=['Atracciones', 'Cafeterías'],
+        default=['Turismo', 'Cafeterías'],
     )
     if not gustos:
         gustos = list(TIPOS_GOOGLE.keys())
 
-    st.markdown("### Calidad mínima")
-    rating_min = st.slider("Rating mínimo", 1.0, 5.0, 4.0, 0.1)
-    radio_km   = st.slider("Radio de búsqueda (km)", 1, 20, 5)
+    st.markdown("### Puntuación mínima")
+    rating_min = st.slider("", 1.0, 5.0, 4.0, 0.1)
+
+    st.markdown("### Radio de búsqueda (km)")
+    radio_km   = st.slider("", 1, 20, 5)
 
     st.markdown("---")
-    buscar = st.button("Generar Planning")
+    buscar = st.button("Generar Itinerario")
 
 # ─────────────────────────────────────────────
 #  HERO
@@ -1022,8 +1055,16 @@ with tab_planning:
             else:
                 horario_badge = ''
 
+            photo = foto_url(act.get('photo_ref'), max_w=640, max_h=480)
+            if photo:
+                foto_html = f'<img src="{photo}" class="card-photo" alt="{act["nombre"]}"/>'
+            else:
+                foto_html = '<div class="card-photo-placeholder">Sin imagen</div>'
+
             with st.container(border=True):
-                col_info, col_btn = st.columns([3, 1], gap="large")
+                col_img, col_info, col_btn = st.columns([1.1, 2.8, 1], gap="medium")
+                with col_img:
+                    st.markdown(foto_html, unsafe_allow_html=True)
                 with col_info:
                     st.markdown(
                         f'{hora_html}'
@@ -1041,7 +1082,7 @@ with tab_planning:
                     st.markdown("<div style='height: 10px'></div>", unsafe_allow_html=True)
 
                     if st.button(
-                        f"Cambiar por otra de {act['tipo']}",
+                        f"Otra sugerencia de {act['tipo']}",
                         key=f"swap_{dia}_{act['place_id']}",
                         use_container_width=True  # hace que ocupe todo el 1/3
                     ):
@@ -1149,8 +1190,14 @@ with tab_explorar:
     for _, row in df_vista.iterrows():
         n_rev = f"{int(row['n_reviews']):,} reseñas" if row['n_reviews'] else ""
         desc  = f'<div class="desc">{row["descripcion"]}</div>' if row["descripcion"] else ""
+        photo = foto_url(row.get('photo_ref'), max_w=640, max_h=480)
+        if photo:
+            foto_html = f'<img src="{photo}" class="explore-card-photo" alt="{row["nombre"]}"/>'
+        else:
+            foto_html = ''
         st.markdown(
             f'<div class="place-card">'
+            f'{foto_html}'
             f'<div class="card-title">{row["nombre"]}</div>'
             f'<div class="meta">{row["direccion"]} &nbsp;|&nbsp; {n_rev}</div>'
             f'<span class="badge badge-type">{row["tipo"]}</span>'
