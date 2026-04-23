@@ -744,7 +744,6 @@ with st.sidebar:
         buscar_ciudades,
         key="ciudad_sb",
         placeholder="Madrid, París, Roma...",
-        label="Ciudad",
         clear_on_submit=False,
     )
 
@@ -763,7 +762,6 @@ with st.sidebar:
             hacer_buscador_hoteles(lat_ciudad, lng_ciudad),
             key=f"hotel_sb_{ciudad}",
             placeholder="Hotel, hostal o dirección (Airbnb)…",
-            label="Hotel / dirección (en la ciudad elegida)",
             clear_on_submit=False,
         )
     else:
@@ -992,37 +990,43 @@ with tab_planning:
                 horario_badge = ''
 
             with st.container(border=True):
-                st.markdown(
-                    f'{hora_html}'
-                    f'<div style="font-size:1.1rem;font-weight:600;color:#1A1A2E;margin-bottom:4px;">{act["nombre"]}</div>'
-                    f'<div style="font-size:0.82rem;color:#888;margin-bottom:6px;">{act["direccion"]} &nbsp;|&nbsp; {n_rev}</div>'
-                    f'<span class="badge badge-type">{act["tipo"]}</span>'
-                    f'<span class="badge badge-price">{act["precio"]}</span>'
-                    f'{horario_badge}'
-                    f'<div style="margin-top:8px;color:#555;font-size:0.9rem;">'
-                    f'Rating: <b>{act["rating"]:.1f}/5</b></div>'
-                    f'{desc}',
-                    unsafe_allow_html=True,
-                )
-                if st.button(
-                    f"Cambiar por otra de {act['tipo']}",
-                    key=f"swap_{dia}_{act['place_id']}",
-                ):
-                    df_nuevo, nombre_nuevo = swap_actividad(
-                        st.session_state.df_plan,
-                        st.session_state.df_todos,
-                        act['place_id'],
+                col_info, col_btn = st.columns([3, 1], gap="large")
+                with col_info:
+                    st.markdown(
+                        f'{hora_html}'
+                        f'<div style="font-size:1.1rem;font-weight:600;color:#1A1A2E;margin-bottom:4px;">{act["nombre"]}</div>'
+                        f'<div style="font-size:0.82rem;color:#888;margin-bottom:6px;">{act["direccion"]} &nbsp;|&nbsp; {n_rev}</div>'
+                        f'<span class="badge badge-type">{act["tipo"]}</span>'
+                        f'<span class="badge badge-price">{act["precio"]}</span>'
+                        f'{horario_badge}'
+                        f'<div style="margin-top:8px;color:#555;font-size:0.9rem;">'
+                        f'Rating: <b>{act["rating"]:.1f}/5</b></div>'
+                        f'{desc}',
+                        unsafe_allow_html=True,
                     )
-                    if df_nuevo is None:
-                        st.warning(f"No hay más lugares disponibles de tipo {act['tipo']}.")
-                    else:
-                        fi = st.session_state.fechas_res[0] if st.session_state.fechas_res else None
-                        hc = st.session_state.hotel_coords_res
-                        df_act, descs = asignar_horas_df(df_nuevo, fi, hc)
-                        st.session_state.df_plan = df_act
-                        st.session_state.descansos_dia = descs
-                        st.toast(f"Cambiado por «{nombre_nuevo}»")
-                        st.rerun()
+                with col_btn:
+                    st.markdown("<div style='height: 10px'></div>", unsafe_allow_html=True)
+
+                    if st.button(
+                        f"Cambiar por otra de {act['tipo']}",
+                        key=f"swap_{dia}_{act['place_id']}",
+                        use_container_width=True  # hace que ocupe todo el 1/3
+                    ):
+                        df_nuevo, nombre_nuevo = swap_actividad(
+                            st.session_state.df_plan,
+                            st.session_state.df_todos,
+                            act['place_id'],
+                        )
+                        if df_nuevo is None:
+                            st.warning(f"No hay más lugares disponibles de tipo {act['tipo']}.")
+                        else:
+                            fi = st.session_state.fechas_res[0] if st.session_state.fechas_res else None
+                            hc = st.session_state.hotel_coords_res
+                            df_act, descs = asignar_horas_df(df_nuevo, fi, hc)
+                            st.session_state.df_plan = df_act
+                            st.session_state.descansos_dia = descs
+                            st.toast(f"Cambiado por «{nombre_nuevo}»")
+                            st.rerun()
 
                 with st.expander(f"Más detalles de {act['nombre']}"):
                     with st.spinner("Cargando detalles..."):
