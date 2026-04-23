@@ -1094,80 +1094,93 @@ with tab_explorar:
             f'&query={quote(row["nombre"])}'
             f'&query_place_id={row["place_id"]}'
         )
-with st.container():
-    st.markdown('<div class="card">', unsafe_allow_html=True)
+        
+    for kind, data in bloques_dia:
 
-    col1, col2 = st.columns([8,1])
-
-    with col1:
-
-        # 🕐 HORA
-        if pd.notna(act.get('hora_ini')):
+        if kind == 'desc':
+            # 🔹 DESCANSOS (igual que antes)
+            icon = '🚶' if data['kind'] == 'traslado' else '☕'
             st.markdown(
-                f'<div class="time">🕐 {formato_hora(act["hora_ini"])} – {formato_hora(act["hora_fin"])}</div>',
-                unsafe_allow_html=True
+                f"{icon} **{data['label']}** · "
+                f"{formato_hora(data['ini'])} – {formato_hora(data['fin'])}",
             )
+            continue
 
-        # 🏷️ TITULO
-        st.markdown(
-            f'<div class="card-title">{act["nombre"]}</div>',
-            unsafe_allow_html=True
-        )
+        act = data
 
-        # 📍 DIRECCIÓN
-        st.markdown(
-            f'<div class="card-meta">📍 {act["direccion"]} · {n_rev}</div>',
-            unsafe_allow_html=True
-        )
+        # 🔥 CONTENEDOR REAL DE LA CARD
+        with st.container():
 
-        # 🏷️ BADGES
-        st.markdown(
-            f'<div class="card-section">'
-            f'<span class="badge badge-type">{act["tipo"]}</span>'
-            f'<span class="badge badge-price">{act["precio"]}</span>'
-            f'</div>',
-            unsafe_allow_html=True
-        )
+            col_main, col_btn = st.columns([8,1])
 
-        # ⭐ RATING
-        st.markdown(
-            f'<div class="card-section">{"⭐"*int(round(act["rating"]))} '
-            f'<span style="font-size:0.85rem;color:#666;">{act["rating"]:.1f}/5</span></div>',
-            unsafe_allow_html=True
-        )
+            with col_main:
+                st.markdown(
+                    f"""
+                    <div style="
+                        background:white;
+                        border-radius:14px;
+                        padding:16px;
+                        margin-bottom:12px;
+                        border:1px solid #E5E7EB;
+                        box-shadow:0 4px 12px rgba(0,0,0,0.05);
+                    ">
 
-        # 📝 DESCRIPCIÓN
-        if act["descripcion"]:
-            st.markdown(
-                f'<div class="card-desc">{act["descripcion"]}</div>',
-                unsafe_allow_html=True
-            )
+                        <div style="font-size:0.8rem;color:#666;">
+                            🕐 {formato_hora(act["hora_ini"])} – {formato_hora(act["hora_fin"])}
+                        </div>
 
-        # 🔗 LINK
-        st.markdown(
-            f'<div class="card-footer">'
-            f'<a href="{maps_url}" target="_blank">🗺️ Ver en Google Maps</a>'
-            f'</div>',
-            unsafe_allow_html=True
-        )
+                        <div style="font-size:1.2rem;font-weight:600;margin-top:4px;">
+                            {act["nombre"]}
+                        </div>
 
-    # 🔄 BOTÓN (alineado bien)
-    with col2:
-        if st.button("🔄", key=f"swap_{dia}_{act['place_id']}"):
-            df_nuevo, nombre_nuevo = swap_actividad(
-                st.session_state.df_plan,
-                st.session_state.df_todos,
-                act['place_id'],
-            )
-            if df_nuevo is None:
-                st.warning(f"No hay más lugares disponibles de tipo {act['tipo']}.")
-            else:
-                fi = st.session_state.fechas_res[0] if st.session_state.fechas_res else None
-                hc = st.session_state.hotel_coords_res
-                df_act, descs = asignar_horas_df(df_nuevo, fi, hc)
-                st.session_state.df_plan = df_act
-                st.session_state.descansos_dia = descs
-                st.toast(f"Cambiado por «{nombre_nuevo}»", icon="🔄")
-                st.rerun()
+                        <div style="font-size:0.85rem;color:#777;margin-top:4px;">
+                            📍 {act["direccion"]} · {int(act["n_reviews"]):,} reseñas
+                        </div>
 
-    st.markdown('</div>', unsafe_allow_html=True)
+                        <div style="margin-top:6px;">
+                            <span style="background:#EEF2FF;padding:4px 8px;border-radius:12px;font-size:0.75rem;">
+                                {act["tipo"]}
+                            </span>
+                            <span style="background:#ECFDF5;padding:4px 8px;border-radius:12px;font-size:0.75rem;">
+                                {act["precio"]}
+                            </span>
+                        </div>
+
+                        <div style="margin-top:6px;">
+                            {'⭐'*int(round(act["rating"]))}
+                            <span style="color:#666;font-size:0.8rem;">
+                                {act["rating"]:.1f}
+                            </span>
+                        </div>
+
+                        <div style="margin-top:8px;font-size:0.9rem;color:#444;">
+                            {act["descripcion"] or ""}
+                        </div>
+
+                        <div style="margin-top:8px;">
+                            <a href="{maps_url}" target="_blank">🗺️ Ver en Google Maps</a>
+                        </div>
+
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+
+            # 🔥 BOTÓN AHORA SÍ ESTÁ ASOCIADO A LA CARD
+            with col_btn:
+                if st.button("🔄", key=f"swap_{dia}_{act['place_id']}"):
+                    df_nuevo, nombre_nuevo = swap_actividad(
+                        st.session_state.df_plan,
+                        st.session_state.df_todos,
+                        act['place_id'],
+                    )
+                    if df_nuevo is None:
+                        st.warning(f"No hay más lugares disponibles de tipo {act['tipo']}.")
+                    else:
+                        fi = st.session_state.fechas_res[0] if st.session_state.fechas_res else None
+                        hc = st.session_state.hotel_coords_res
+                        df_act, descs = asignar_horas_df(df_nuevo, fi, hc)
+                        st.session_state.df_plan = df_act
+                        st.session_state.descansos_dia = descs
+                        st.toast(f"Cambiado por «{nombre_nuevo}»", icon="🔄")
+                        st.rerun()
