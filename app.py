@@ -91,8 +91,8 @@ h1, h2, h3, h4 { font-family: 'Inter', sans-serif !important; font-weight: 600; 
 }
 .card-photo-wrap img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 12px; display: block; }
 .explore-card-photo {
-    width: 100%; aspect-ratio: 4 / 3; object-fit: cover;
-    border-radius: 12px; display: block; margin-bottom: 10px;
+    width: 50%; aspect-ratio: 4 / 2; object-fit: cover;
+    border-radius: 12px; display: block; margin: 0 auto 10px auto;
     box-shadow: 0 2px 10px rgba(0,0,0,0.06);
 }
 .stButton > button {
