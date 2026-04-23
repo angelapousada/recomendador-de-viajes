@@ -110,29 +110,22 @@ PRECIO_NUM = {
 }
 TIPOS_GOOGLE = {
     '🏛️ Atracciones':  'tourist_attraction',
-    '🎨 Museos':       'museum',
-    '🎭 Arte':         'art_gallery',
     '🍽️ Restaurantes': 'restaurant',
     '☕ Cafeterías':   'cafe',
     '🍻 Bares/Pubs':   'bar',
     '🌿 Parques':      'park',
     '🎡 Ocio':         'amusement_park',
-    '🎬 Cines':        'movie_theater',
 }
 COLORES_DIA = ['blue', 'red', 'green', 'purple', 'orange', 'darkblue', 'cadetblue']
 ICONOS_TIPO = {
     '🏛️ Atracciones': 'star',       '🍽️ Restaurantes': 'cutlery',
     '🎨 Museos':       'book',       '🌿 Parques':      'leaf',
-    '🎭 Arte':         'picture',    '🎡 Ocio':         'fire',
+    '🎡 Ocio':         'fire',
     '☕ Cafeterías':   'glass',      '🍻 Bares/Pubs':   'glass',
-    '🎬 Cines':        'film',
 }
 TIPO_PESO = {
     '🏛️ Atracciones':  1.30,
-    '🎨 Museos':       1.25,
-    '🎭 Arte':         1.10,
     '🎡 Ocio':         1.05,
-    '🎬 Cines':        1.00,
     '🍽️ Restaurantes': 1.00,
     '🍻 Bares/Pubs':   0.95,
     '☕ Cafeterías':   0.90,
@@ -140,26 +133,20 @@ TIPO_PESO = {
 }
 TIPO_IDEAL_HORAS = {
     '☕ Cafeterías':   [9.5, 11.0, 17.0],
-    '🎨 Museos':       [10.0, 11.5, 16.0],
     '🏛️ Atracciones': [10.0, 11.5, 16.0, 17.5],
-    '🎭 Arte':         [11.0, 16.0],
     '🌿 Parques':      [11.0, 16.0],
     '🍽️ Restaurantes': [13.5, 21.0],
     '🎡 Ocio':         [16.0, 18.5, 20.0],
-    '🎬 Cines':        [18.5, 21.0],
     '🍻 Bares/Pubs':   [21.0, 22.5, 18.5],
 }
 HORA_PREF_ORDEN = [
-    '🍻 Bares/Pubs', '🍽️ Restaurantes', '🎬 Cines',
+    '🍻 Bares/Pubs', '🍽️ Restaurantes',
     '☕ Cafeterías', '🎡 Ocio',
-    '🏛️ Atracciones', '🎨 Museos', '🎭 Arte', '🌿 Parques',
+    '🏛️ Atracciones', '🌿 Parques',
 ]
 TIPO_DURACION = {   # horas
     '🏛️ Atracciones':  1.5,
-    '🎨 Museos':       2.0,
-    '🎭 Arte':         1.5,
     '🎡 Ocio':         2.5,
-    '🎬 Cines':        2.5,
     '🍽️ Restaurantes': 1.5,
     '☕ Cafeterías':   0.75,
     '🍻 Bares/Pubs':   1.5,
@@ -167,10 +154,7 @@ TIPO_DURACION = {   # horas
 }
 CATEGORIA_TIPO = {
     '🏛️ Atracciones':  'cultural',
-    '🎨 Museos':       'cultural',
-    '🎭 Arte':         'cultural',
     '🎡 Ocio':         'ocio',
-    '🎬 Cines':        'ocio',
     '🍽️ Restaurantes': 'comida',
     '☕ Cafeterías':   'comida',
     '🍻 Bares/Pubs':   'comida',
@@ -557,7 +541,7 @@ def extraer(lugar, tipo_nombre):
         'tipo':            tipo_nombre,
         'rating':          lugar.get('rating'),
         'n_reviews':       lugar.get('userRatingCount', 0),
-        'precio':          PRECIO_LABEL.get(pk, '❓ Desconocido'),
+        'precio':          PRECIO_LABEL.get(pk, 'Sin precio estipulado'),
         'precio_num':      PRECIO_NUM.get(pk),
         'direccion':       lugar.get('formattedAddress', ''),
         'lat':             lugar.get('location', {}).get('latitude'),
@@ -749,9 +733,9 @@ with st.sidebar:
 
     st.markdown("### 🎯 Preferencias")
     gustos = st.multiselect(
-        "Tipos de lugar",
+        "Activiades a elegir",
         options=list(TIPOS_GOOGLE.keys()),
-        default=['🏛️ Atracciones', '🎨 Museos', '🍽️ Restaurantes', '☕ Cafeterías'],
+        default=['🏛️ Atracciones', '☕ Cafeterías'],
     )
     if not gustos:
         gustos = list(TIPOS_GOOGLE.keys())
