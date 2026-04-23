@@ -291,6 +291,17 @@ def haversine(lat1, lng1, lat2, lng2):
     a = sin(dlat/2)**2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlng/2)**2
     return 2 * R * asin(sqrt(a))
 
+def elegir_modo_transporte(dist_km):
+    if dist_km is None:
+        return "WALK"
+
+    if dist_km <= 1.2:
+        return "WALK"
+    elif dist_km <= 6:
+        return "TRANSIT"
+    else:
+        return "DRIVE"
+
 def abierto_en_fechas(periods, fechas):
     """True si el lugar está abierto al menos un día del viaje, o si no hay datos."""
     if not periods:
@@ -320,15 +331,6 @@ def formato_hora(h):
     if mm == 60:
         hh, mm = hh + 1, 0
     return f"{hh:02d}:{mm:02d}"
-
-def tiempo_desplazamiento(lat1, lng1, lat2, lng2):
-    """Horas aproximadas entre dos puntos. Siempre a pie (~4.5 km/h)."""
-    if None in (lat1, lng1, lat2, lng2):
-        return 0.0
-    km = haversine(lat1, lng1, lat2, lng2)
-    if km == float('inf'):
-        return 0.0
-    return km / 4.5
 
 def _weekday_google(f):
     return (f.weekday() + 1) % 7
@@ -444,18 +446,30 @@ def _planificar_dia(grupo_df, fecha_dia, hotel_coords):
 
         # Traslado
         if prev_loc and pd.notna(row.get('lat')) and pd.notna(row.get('lng')):
-            km_tras = haversine(prev_loc[0], prev_loc[1], row['lat'], row['lng'])
-            viaje = tiempo_desplazamiento(prev_loc[0], prev_loc[1], row['lat'], row['lng'])
+            dist_km = haversine(prev_loc[0], prev_loc[1], row['lat'], row['lng'])
+            modo = elegir_modo_transporte(dist_km)
+
+            viaje = tiempo_google(
+                prev_loc[0], prev_loc[1],
+                row['lat'], row['lng'],
+                modo=modo
+            )
         else:
-            km_tras = 0.0
+            dist_km = 0.0
             viaje = 0.0
+            modo = "WALK"
+
         desde_hotel = (prev_idx is None and hotel_coords is not None)
         # Mostramos el traslado si es significativo (≥6 min) o si viene desde el alojamiento
         if viaje >= 0.1 or (desde_hotel and viaje > 0):
-            modo = 'a pie'
+            modo_txt = {
+                "WALK": "a pie",
+                "TRANSIT": "transporte público",
+                "DRIVE": "coche"
+            }.get(modo, "a pie")
             descansos.append({
                 'kind': 'traslado', 'ini': reloj, 'fin': reloj + viaje,
-                'label': f'{int(round(viaje * 60))} min {modo}',
+                'label': f'{int(round(viaje * 60))} min {modo_txt}',
                 'tras_idx': prev_idx,
                 'km': km_tras,
                 'modo': modo,
@@ -631,6 +645,46 @@ def obtener_detalles(place_id):
         params={'languageCode': 'es'}, timeout=10
     )
     return r.json()
+
+    @st.cache_data(ttl=3600, show_spinner=False)
+    def tiempo_google(lat1, lng1, lat2, lng2, modo="WALK"):
+        if None in (lat1, lng1, lat2, lng2) or not API_KEY:
+            return 0.0
+
+        url = "https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix"
+
+        headers = {
+            "Content-Type": "application/json",
+            "X-Goog-Api-Key": API_KEY,
+            "X-Goog-FieldMask": "duration,distanceMeters"
+        }
+
+        body = {
+            "origins": [{
+                "waypoint": {
+                    "location": {"latLng": {"latitude": lat1, "longitude": lng1}}
+                }
+            }],
+            "destinations": [{
+                "waypoint": {
+                    "location": {"latLng": {"latitude": lat2, "longitude": lng2}}
+                }
+            }],
+            "travelMode": modo
+        }
+
+        try:
+            r = requests.post(url, json=body, headers=headers, timeout=5)
+            data = r.json()
+
+            if isinstance(data, list) and len(data) > 0:
+                dur_str = data[0].get("duration", "0s")
+                segundos = int(dur_str.replace("s", ""))
+                return segundos / 3600
+        except Exception:
+            pass
+
+        return 0.0
 
 def foto_url(photo_ref, max_w=640, max_h=480):
     if not photo_ref or not API_KEY:
@@ -1137,7 +1191,7 @@ with tab_planning:
 
 # ── TAB 2: MAPA ──────────────────────────────
 with tab_mapa:
-    mapa = folium.Map(location=[lat, lng], zoom_start=13)
+    mapa = folium.Map(location=[lat, lng], zoom_start=13, tiles='CartoDB positron') #Tipo de mapa
     if hotel_res:
         folium.Marker(
             location=[lat, lng],
