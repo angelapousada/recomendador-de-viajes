@@ -13,7 +13,7 @@ import math
 #  CONFIGURACIÓN
 # ─────────────────────────────────────────────
 st.set_page_config(
-    page_title="TravelPlanner",
+    page_title="Recomendador de Viajes",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -67,6 +67,12 @@ h1, h2, h3, h4 { font-family: 'Inter', sans-serif !important; font-weight: 600; 
 .hero p  { color: #555 !important; margin: 0.5rem 0 0 0; font-size: 1.05rem; }
 .viaje-resumen { color: #555; font-size: 0.95rem; margin: 0.2rem 0 1.4rem 0; }
 .viaje-resumen b { color: #1A1A2E; }
+.traslado-line {
+    text-align: center; color: #7a7a85; font-size: 0.82rem;
+    margin: -4px 0 10px 0; letter-spacing: 0.02em;
+}
+.traslado-line .flecha { color: #6B7280; margin-right: 6px; }
+.traslado-line b { color: #1A1A2E; font-weight: 600; }
 .stButton > button {
     background: #1A1A2E !important; color: #FFFFFF !important; border: none !important; border-radius: 10px !important;
     font-weight: 500 !important; font-size: 1rem !important; padding: 0.6rem 1.8rem !important;
@@ -418,14 +424,23 @@ def _planificar_dia(grupo_df, fecha_dia, hotel_coords):
 
         # Traslado
         if prev_loc and pd.notna(row.get('lat')) and pd.notna(row.get('lng')):
+            km_tras = haversine(prev_loc[0], prev_loc[1], row['lat'], row['lng'])
             viaje = tiempo_desplazamiento(prev_loc[0], prev_loc[1], row['lat'], row['lng'])
         else:
+            km_tras = 0.0
             viaje = 0.0
-        if viaje >= 0.1:
+        desde_hotel = (prev_idx is None and hotel_coords is not None)
+        # Mostramos el traslado si es significativo (≥6 min) o si viene desde el alojamiento
+        if viaje >= 0.1 or (desde_hotel and viaje > 0):
+            modo = 'a pie' if km_tras <= 1.5 else 'en coche'
             descansos.append({
                 'kind': 'traslado', 'ini': reloj, 'fin': reloj + viaje,
-                'label': f'Traslado · ~{int(round(viaje * 60))} min',
+                'label': f'{int(round(viaje * 60))} min {modo}',
                 'tras_idx': prev_idx,
+                'km': km_tras,
+                'modo': modo,
+                'desde_hotel': desde_hotel,
+                'hacia_place_id': row.get('place_id'),
             })
             reloj += viaje
 
@@ -733,7 +748,7 @@ for key, default in {
 #  SIDEBAR
 # ─────────────────────────────────────────────
 with st.sidebar:
-    st.markdown("## TravelPlanner")
+    st.markdown("## Recomendador de Viajes")
     st.markdown("---")
 
     if not API_KEY:
@@ -942,7 +957,6 @@ if hotel_res:
     resumen_partes.append(f"Alojamiento: <b>{hotel_res}</b>")
 resumen_partes.append(f"Régimen: <b>{regimen_res}</b>")
 resumen_partes.append(
-    f"<b>{dias_res}</b> días · <b>{len(df_plan)}</b> actividades · "
     f"Rating medio <b>{df_plan['rating'].mean():.1f}/5</b>"
 )
 st.markdown(
@@ -955,6 +969,7 @@ tab_planning, tab_mapa, tab_explorar = st.tabs(["Planning", "Mapa", "Explorar lu
 # ── TAB 1: PLANNING ──────────────────────────
 with tab_planning:
     fecha_ini_res = fechas_res[0] if fechas_res else None
+    descansos_dia_map = st.session_state.get('descansos_dia') or {}
     for dia in range(1, dias_res + 1):
         acts = df_plan[df_plan['dia'] == dia].copy()
         if acts.empty:
@@ -969,7 +984,25 @@ with tab_planning:
 
         acts = acts.sort_values('hora_ini', na_position='last')
 
+        # Traslados del día indexados por el place_id de la actividad a la que llegan
+        traslados_hacia = {
+            d.get('hacia_place_id'): d
+            for d in descansos_dia_map.get(dia, [])
+            if d.get('kind') == 'traslado' and d.get('hacia_place_id')
+        }
+
         for _, act in acts.iterrows():
+            t = traslados_hacia.get(act['place_id'])
+            if t:
+                km_txt = f" · {t['km']:.1f} km" if t.get('km', 0) > 0 else ''
+                prefix = 'Desde el alojamiento · ' if t.get('desde_hotel') else ''
+                st.markdown(
+                    f'<div class="traslado-line">'
+                    f'<span class="flecha">↓</span>{prefix}'
+                    f'<b>{t["label"]}</b>{km_txt}'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
             n_rev = f"{int(act['n_reviews']):,} reseñas" if act['n_reviews'] else ""
             desc  = f'<div class="desc">{act["descripcion"]}</div>' if act["descripcion"] else ""
 
