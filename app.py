@@ -6,7 +6,6 @@ from streamlit_folium import st_folium
 from streamlit_searchbox import st_searchbox
 from datetime import date, timedelta
 from math import radians, cos, sin, asin, sqrt
-from urllib.parse import quote
 import time
 import math
 
@@ -43,15 +42,11 @@ h1, h2, h3, h4 { font-family: 'Inter', sans-serif !important; font-weight: 600; 
     box-shadow: 0 2px 12px rgba(0,0,0,0.04);
     border-top: 1px solid #EEE; border-right: 1px solid #EEE; border-bottom: 1px solid #EEE;
 }
-.place-card h4 { margin: 0 0 4px 0; font-family: 'Inter', sans-serif; font-weight: 600; font-size: 1.1rem; color: #1A1A2E; }
+.place-card .card-title { margin: 0 0 4px 0; font-family: 'Inter', sans-serif; font-weight: 600; font-size: 1.1rem; color: #1A1A2E; }
 .place-card .meta { font-size: 0.82rem; color: #888; margin-bottom: 6px; }
-.place-card .desc { font-size: 0.88rem; color: #555; line-height: 1.5; }
+.place-card .desc { font-size: 0.88rem; color: #555; line-height: 1.5; margin-top: 6px; }
+.place-card .rating-line { margin-top: 8px; color: #555; font-size: 0.9rem; }
 .hora-slot { display: inline-block; background: #1A1A2E; color: #FFFFFF; font-weight: 500; padding: 4px 12px; border-radius: 8px; font-size: 0.85rem; margin-bottom: 6px; letter-spacing: 0.04em; }
-.place-card .links { margin-top: 10px; font-size: 0.85rem; }
-.place-card .links a { color: #0F3460; text-decoration: none; margin-right: 14px; }
-.place-card .links a:hover { text-decoration: underline; }
-.descanso { background: #FFF8E1; color: #6B5615; border-radius: 10px; padding: 8px 14px; margin: 6px 0; font-size: 0.88rem; border-left: 3px solid #B8860B; }
-.descanso.traslado { background: #EEF2FF; color: #3730A3; border-left-color: #6366F1; }
 .badge-horario { background: #E0F2FE; color: #075985; }
 .badge-cerrado { background: #FEE2E2; color: #991B1B; }
 .badge { display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 500; margin-right: 6px; }
@@ -70,14 +65,25 @@ h1, h2, h3, h4 { font-family: 'Inter', sans-serif !important; font-weight: 600; 
 }
 .hero h1 { color: #1A1A2E !important; font-size: 2.8rem; margin: 0; line-height: 1.1; font-weight: 700; }
 .hero p  { color: #555 !important; margin: 0.5rem 0 0 0; font-size: 1.05rem; }
-.stat-box { background: #FAFAFA; border-radius: 12px; padding: 1rem 1.2rem; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid #EEE; }
-.stat-box .num { font-size: 2rem; font-family: 'Inter', sans-serif; font-weight: 700; color: #1A1A2E; }
-.stat-box .lbl { font-size: 0.78rem; color: #999; text-transform: uppercase; letter-spacing: 0.05em; }
+.viaje-resumen { color: #555; font-size: 0.95rem; margin: 0.2rem 0 1.4rem 0; }
+.viaje-resumen b { color: #1A1A2E; }
 .stButton > button {
-    background: #1A1A2E; color: #FFFFFF; border: none; border-radius: 10px;
-    font-weight: 500; font-size: 1rem; padding: 0.6rem 1.8rem; width: 100%;
+    background: #1A1A2E !important; color: #FFFFFF !important; border: none !important; border-radius: 10px !important;
+    font-weight: 500 !important; font-size: 1rem !important; padding: 0.6rem 1.8rem !important;
 }
-.stButton > button:hover { background: #2C2C44; color: #FFFFFF; }
+.stButton > button:hover { background: #2C2C44 !important; color: #FFFFFF !important; }
+.stButton > button p { color: #FFFFFF !important; }
+[data-testid="stVerticalBlockBorderWrapper"] {
+    background: #FAFAFA;
+    border-radius: 16px !important;
+    border: 1px solid #EEE !important;
+    border-left: 4px solid #6B7280 !important;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.04);
+    margin-bottom: 1rem;
+}
+[data-testid="stVerticalBlockBorderWrapper"] .stButton > button {
+    width: auto !important; padding: 0.45rem 1.2rem !important; font-size: 0.85rem !important;
+}
 .empty-state { text-align: center; padding: 4rem 2rem; color: #999; }
 .empty-state h3 { font-family: 'Inter', sans-serif; font-weight: 600; color: #555; }
 .review-box {
@@ -162,6 +168,20 @@ CATEGORIA_TIPO = {
 }
 DIA_INICIO = 9.0
 DIA_FIN    = 22.0
+
+MESES_ES = [
+    'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+    'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
+]
+DIAS_SEMANA_ES = [
+    'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo',
+]
+
+def fecha_es(d):
+    return f"{d.day} de {MESES_ES[d.month - 1]} de {d.year}"
+
+def fecha_es_con_dia(d):
+    return f"{DIAS_SEMANA_ES[d.weekday()].capitalize()} {d.day} de {MESES_ES[d.month - 1]} de {d.year}"
 
 # ─────────────────────────────────────────────
 #  API KEY DESDE SECRETS
@@ -910,79 +930,48 @@ if len(df_plan) == 0:
     st.warning("No hay lugares con esos filtros. Baja el rating mínimo o amplía el presupuesto.")
     st.stop()
 
-# Stats
+# Resumen del viaje
 st.markdown(f"## {nombre_ciudad}")
 fechas_res = st.session_state.get('fechas_res')
 hotel_res  = st.session_state.get('hotel_res')
 regimen_res = st.session_state.get('regimen_res', 'Solo alojamiento')
-subline = []
+
+resumen_partes = []
 if fechas_res:
     fi, ff = fechas_res
-    subline.append(f"{fi.strftime('%d %b %Y')} → {ff.strftime('%d %b %Y')}")
+    resumen_partes.append(f"Del <b>{fecha_es(fi)}</b> al <b>{fecha_es(ff)}</b>")
 if hotel_res:
-    subline.append(f"{hotel_res}")
-subline.append(f"{regimen_res}")
-if subline:
-    st.caption("  ·  ".join(subline))
-
-c1, c2, c3, c4 = st.columns(4)
-with c1:
-    st.markdown(f'<div class="stat-box"><div class="num">{dias_res}</div><div class="lbl">Días de viaje</div></div>', unsafe_allow_html=True)
-with c2:
-    st.markdown(f'<div class="stat-box"><div class="num">{len(df_plan)}</div><div class="lbl">Actividades</div></div>', unsafe_allow_html=True)
-with c3:
-    st.markdown(f'<div class="stat-box"><div class="num">{df_plan["rating"].mean():.1f}/5</div><div class="lbl">Rating medio</div></div>', unsafe_allow_html=True)
-with c4:
-    st.markdown(f'<div class="stat-box"><div class="num">{df_plan["tipo"].nunique()}</div><div class="lbl">Tipos de plan</div></div>', unsafe_allow_html=True)
-
-st.markdown("<br>", unsafe_allow_html=True)
+    resumen_partes.append(f"Alojamiento: <b>{hotel_res}</b>")
+resumen_partes.append(f"Régimen: <b>{regimen_res}</b>")
+resumen_partes.append(
+    f"<b>{dias_res}</b> días · <b>{len(df_plan)}</b> actividades · "
+    f"Rating medio <b>{df_plan['rating'].mean():.1f}/5</b>"
+)
+st.markdown(
+    f'<div class="viaje-resumen">{"  ·  ".join(resumen_partes)}</div>',
+    unsafe_allow_html=True,
+)
 
 tab_planning, tab_mapa, tab_explorar = st.tabs(["Planning", "Mapa", "Explorar lugares"])
 
 # ── TAB 1: PLANNING ──────────────────────────
 with tab_planning:
     fecha_ini_res = fechas_res[0] if fechas_res else None
-    descansos_dia_map = st.session_state.get('descansos_dia') or {}
     for dia in range(1, dias_res + 1):
         acts = df_plan[df_plan['dia'] == dia].copy()
         if acts.empty:
             continue
         if fecha_ini_res:
             fecha_dia = fecha_ini_res + timedelta(days=dia - 1)
-            encabezado = f'Día {dia} · {fecha_dia.strftime("%a %d %b %Y").capitalize()}'
+            encabezado = f'Día {dia} · {fecha_es_con_dia(fecha_dia)}'
         else:
             fecha_dia = None
             encabezado = f'Día {dia}'
         st.markdown(f'<div class="day-header">{encabezado}</div>', unsafe_allow_html=True)
 
-        # Intercalar actividades con descansos/traslados según orden cronológico
-        bloques_dia = []
+        acts = acts.sort_values('hora_ini', na_position='last')
+
         for _, act in acts.iterrows():
-            bloques_dia.append(('act', act))
-        for d in descansos_dia_map.get(dia, []):
-            bloques_dia.append(('desc', d))
-        def _clave_bloque(b):
-            kind, data = b
-            if kind == 'act':
-                h = data.get('hora_ini')
-                return float(h) if pd.notna(h) else 99.0
-            return float(data['ini'])
-        bloques_dia.sort(key=_clave_bloque)
-
-        for kind, data in bloques_dia:
-            if kind == 'desc':
-                extra_class = ' traslado' if data['kind'] == 'traslado' else ''
-                ini_txt = formato_hora(data['ini'])
-                fin_txt = formato_hora(data['fin'])
-                mins = int(round((data['fin'] - data['ini']) * 60))
-                st.markdown(
-                    f'<div class="descanso{extra_class}"><b>{data["label"]}</b> · '
-                    f'{ini_txt} – {fin_txt} ({mins} min)</div>',
-                    unsafe_allow_html=True,
-                )
-                continue
-
-            act = data
             n_rev = f"{int(act['n_reviews']):,} reseñas" if act['n_reviews'] else ""
             desc  = f'<div class="desc">{act["descripcion"]}</div>' if act["descripcion"] else ""
 
@@ -1002,40 +991,22 @@ with tab_planning:
             else:
                 horario_badge = ''
 
-            maps_url = (
-                f'https://www.google.com/maps/search/?api=1'
-                f'&query={quote(act["nombre"])}'
-                f'&query_place_id={act["place_id"]}'
-            )
-            links_html = (
-                f'<div class="links">'
-                f'<a href="{maps_url}" target="_blank" rel="noopener">Ver en Google Maps</a>'
-                f'</div>'
-            )
-
-            col_card, col_btn = st.columns([5, 2])
-            with col_card:
+            with st.container(border=True):
                 st.markdown(
-                    f'<div class="place-card">'
                     f'{hora_html}'
-                    f'<h4>{act["nombre"]}</h4>'
-                    f'<div class="meta">{act["direccion"]} &nbsp;|&nbsp; {n_rev}</div>'
+                    f'<div style="font-size:1.1rem;font-weight:600;color:#1A1A2E;margin-bottom:4px;">{act["nombre"]}</div>'
+                    f'<div style="font-size:0.82rem;color:#888;margin-bottom:6px;">{act["direccion"]} &nbsp;|&nbsp; {n_rev}</div>'
                     f'<span class="badge badge-type">{act["tipo"]}</span>'
                     f'<span class="badge badge-price">{act["precio"]}</span>'
                     f'{horario_badge}'
                     f'<div style="margin-top:8px;color:#555;font-size:0.9rem;">'
                     f'Rating: <b>{act["rating"]:.1f}/5</b></div>'
-                    f'{desc}'
-                    f'{links_html}'
-                    f'</div>',
+                    f'{desc}',
                     unsafe_allow_html=True,
                 )
-            with col_btn:
-                st.markdown('<div style="height: 0.6rem;"></div>', unsafe_allow_html=True)
                 if st.button(
                     f"Cambiar por otra de {act['tipo']}",
                     key=f"swap_{dia}_{act['place_id']}",
-                    use_container_width=True,
                 ):
                     df_nuevo, nombre_nuevo = swap_actividad(
                         st.session_state.df_plan,
@@ -1053,36 +1024,36 @@ with tab_planning:
                         st.toast(f"Cambiado por «{nombre_nuevo}»")
                         st.rerun()
 
-            with st.expander(f"Más detalles de {act['nombre']}"):
-                with st.spinner("Cargando detalles..."):
-                    det = obtener_detalles(act['place_id'])
-                web = det.get('websiteUri')
-                tel = det.get('nationalPhoneNumber')
-                if web:
-                    st.markdown(f"**Web:** [{web}]({web})")
-                if tel:
-                    st.markdown(f"**Teléfono:** {tel}")
-                reviews = det.get('reviews', [])
-                if not reviews:
-                    st.info("No hay reviews disponibles.")
-                for rev in reviews[:5]:
-                    autor   = rev.get('authorAttribution', {}).get('displayName', 'Anónimo')
-                    texto   = rev.get('text', {}).get('text', '')
-                    n_stars = int(rev.get('rating', 0))
-                    tiempo  = rev.get('relativePublishTimeDescription', '')
-                    st.markdown(
-                        f'<div class="review-box">'
-                        f'<div class="author">{n_stars}/5 · {autor} '
-                        f'<span style="color:#aaa;font-weight:300;">· {tiempo}</span></div>'
-                        f'{texto[:400]}'
-                        f'</div>',
-                        unsafe_allow_html=True,
-                    )
-                horarios = det.get('regularOpeningHours', {}).get('weekdayDescriptions', [])
-                if horarios:
-                    st.markdown("**Horarios:**")
-                    for h in horarios:
-                        st.markdown(f"- {h}")
+                with st.expander(f"Más detalles de {act['nombre']}"):
+                    with st.spinner("Cargando detalles..."):
+                        det = obtener_detalles(act['place_id'])
+                    web = det.get('websiteUri')
+                    tel = det.get('nationalPhoneNumber')
+                    if web:
+                        st.markdown(f"**Web:** [{web}]({web})")
+                    if tel:
+                        st.markdown(f"**Teléfono:** {tel}")
+                    reviews = det.get('reviews', [])
+                    if not reviews:
+                        st.info("No hay reviews disponibles.")
+                    for rev in reviews[:5]:
+                        autor   = rev.get('authorAttribution', {}).get('displayName', 'Anónimo')
+                        texto   = rev.get('text', {}).get('text', '')
+                        n_stars = int(rev.get('rating', 0))
+                        tiempo  = rev.get('relativePublishTimeDescription', '')
+                        st.markdown(
+                            f'<div class="review-box">'
+                            f'<div class="author">{n_stars}/5 · {autor} '
+                            f'<span style="color:#aaa;font-weight:300;">· {tiempo}</span></div>'
+                            f'{texto[:4000]}'
+                            f'</div>',
+                            unsafe_allow_html=True,
+                        )
+                    horarios = det.get('regularOpeningHours', {}).get('weekdayDescriptions', [])
+                    if horarios:
+                        st.markdown("**Horarios:**")
+                        for h in horarios:
+                            st.markdown(f"- {h}")
 
 # ── TAB 2: MAPA ──────────────────────────────
 with tab_mapa:
@@ -1141,23 +1112,14 @@ with tab_explorar:
     for _, row in df_vista.iterrows():
         n_rev = f"{int(row['n_reviews']):,} reseñas" if row['n_reviews'] else ""
         desc  = f'<div class="desc">{row["descripcion"]}</div>' if row["descripcion"] else ""
-        maps_url = (
-            f'https://www.google.com/maps/search/?api=1'
-            f'&query={quote(row["nombre"])}'
-            f'&query_place_id={row["place_id"]}'
-        )
         st.markdown(
             f'<div class="place-card">'
-            f'<h4>{row["nombre"]}</h4>'
+            f'<div class="card-title">{row["nombre"]}</div>'
             f'<div class="meta">{row["direccion"]} &nbsp;|&nbsp; {n_rev}</div>'
             f'<span class="badge badge-type">{row["tipo"]}</span>'
             f'<span class="badge badge-price">{row["precio"]}</span>'
-            f'<div style="margin-top:8px;color:#555;font-size:0.9rem;">'
-            f'Rating: <b>{row["rating"]:.1f}/5</b></div>'
+            f'<div class="rating-line">Rating: <b>{row["rating"]:.1f}/5</b></div>'
             f'{desc}'
-            f'<div class="links">'
-            f'<a href="{maps_url}" target="_blank" rel="noopener">Ver en Google Maps</a>'
-            f'</div>'
             f'</div>',
             unsafe_allow_html=True,
         )
