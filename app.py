@@ -38,7 +38,7 @@ h1, h2, h3, h4 { font-family: 'Inter', sans-serif !important; font-weight: 600; 
 }
 .place-card {
     background: #FAFAFA; border-radius: 16px; padding: 1.2rem 1.4rem;
-    margin-bottom: 1rem; border-left: 4px solid #6B7280;
+    margin-bottom: 1rem; border-left: 1px solid #EEE;
     box-shadow: 0 2px 12px rgba(0,0,0,0.04);
     border-top: 1px solid #EEE; border-right: 1px solid #EEE; border-bottom: 1px solid #EEE;
 }
