@@ -22,72 +22,145 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500&display=swap');
-html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; }
-h1, h2, h3 { font-family: 'DM Serif Display', serif !important; }
-.main { background-color: #F7F4EF; }
-.block-container { padding-top: 2rem; padding-bottom: 2rem; }
-[data-testid="stSidebar"] { background-color: #1A1A2E; color: white; }
-[data-testid="stSidebar"] label,
-[data-testid="stSidebar"] .stSlider label,
-[data-testid="stSidebar"] p,
-[data-testid="stSidebar"] span { color: #E8E4DC !important; }
-[data-testid="stSidebar"] h1,
-[data-testid="stSidebar"] h2,
-[data-testid="stSidebar"] h3 { color: #ffffff !important; }
-[data-testid="stSidebar"] .stTextInput input {
-    background: #2D2D4E; border: 1px solid #4A4A7A; color: white; border-radius: 8px;
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
+
+html, body, [class*="css"] {
+    font-family: 'Inter', sans-serif;
 }
-.place-card {
-    background: white; border-radius: 16px; padding: 1.2rem 1.4rem;
-    margin-bottom: 1rem; border-left: 4px solid #E8C547;
-    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+
+.main {
+    background-color: #F9FAFB;
 }
-.place-card h4 { margin: 0 0 4px 0; font-family: 'DM Serif Display', serif; font-size: 1.1rem; color: #1A1A2E; }
-.place-card .meta { font-size: 0.82rem; color: #888; margin-bottom: 6px; }
-.place-card .desc { font-size: 0.88rem; color: #555; line-height: 1.5; }
-.hora-slot { display: inline-block; background: #1A1A2E; color: #E8C547; font-weight: 500; padding: 4px 12px; border-radius: 8px; font-size: 0.85rem; margin-bottom: 6px; letter-spacing: 0.04em; }
-.place-card .links { margin-top: 10px; font-size: 0.85rem; }
-.place-card .links a { color: #0F3460; text-decoration: none; margin-right: 14px; }
-.place-card .links a:hover { text-decoration: underline; }
-.descanso { background: #FFF8E1; color: #6B5615; border-radius: 10px; padding: 8px 14px; margin: 6px 0; font-size: 0.88rem; border-left: 3px solid #E8C547; }
-.descanso.traslado { background: #EEF2FF; color: #3730A3; border-left-color: #6366F1; }
-.badge-horario { background: #E0F2FE; color: #075985; }
-.badge-cerrado { background: #FEE2E2; color: #991B1B; }
-.badge { display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 500; margin-right: 6px; }
-.badge-type  { background: #EEF2FF; color: #4338CA; }
-.badge-price { background: #ECFDF5; color: #065F46; }
-.badge-open  { background: #FEF9C3; color: #854D0E; }
-.day-header {
-    font-family: 'DM Serif Display', serif; font-size: 1.5rem; color: #1A1A2E;
-    border-bottom: 2px solid #E8C547; padding-bottom: 6px; margin: 1.5rem 0 1rem 0;
+
+.block-container {
+    padding-top: 2rem;
+    padding-bottom: 2rem;
 }
+
+/* SIDEBAR */
+[data-testid="stSidebar"] {
+    background-color: #111827;
+}
+
+[data-testid="stSidebar"] * {
+    color: #E5E7EB !important;
+}
+
+/* HERO */
 .hero {
-    background: linear-gradient(135deg, #1A1A2E 0%, #16213E 50%, #0F3460 100%);
-    border-radius: 20px; padding: 3rem 2.5rem; color: white;
-    margin-bottom: 2rem; position: relative; overflow: hidden;
+    background: linear-gradient(135deg, #111827, #1F2937);
+    border-radius: 16px;
+    padding: 2.5rem;
+    color: white;
+    margin-bottom: 2rem;
 }
-.hero::before { content: '✈'; position: absolute; right: 2rem; top: 1.5rem; font-size: 6rem; opacity: 0.08; }
-.hero h1 { color: white !important; font-size: 2.8rem; margin: 0; line-height: 1.1; }
-.hero p  { color: #B0B8D4; margin: 0.5rem 0 0 0; font-size: 1.05rem; }
-.stat-box { background: white; border-radius: 12px; padding: 1rem 1.2rem; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
-.stat-box .num { font-size: 2rem; font-family: 'DM Serif Display', serif; color: #1A1A2E; }
-.stat-box .lbl { font-size: 0.78rem; color: #999; text-transform: uppercase; letter-spacing: 0.05em; }
-.stButton > button {
-    background: #E8C547; color: #1A1A2E; border: none; border-radius: 10px;
-    font-weight: 500; font-size: 1rem; padding: 0.6rem 1.8rem; width: 100%;
+
+.hero h1 {
+    font-size: 2.2rem;
+    margin-bottom: 0.4rem;
 }
-.empty-state { text-align: center; padding: 4rem 2rem; color: #999; }
-.empty-state .icon { font-size: 3rem; margin-bottom: 1rem; }
-.empty-state h3 { font-family: 'DM Serif Display', serif; color: #555; }
-.review-box {
-    background: #F7F4EF; border-radius: 10px; padding: 0.8rem 1rem;
-    margin-bottom: 0.5rem; font-size: 0.85rem; color: #444; border-left: 3px solid #E8C547;
+
+.hero p {
+    color: #9CA3AF;
 }
-.review-box .author { font-weight: 500; color: #1A1A2E; margin-bottom: 3px; }
+
+/* CARDS */
+.place-card {
+    background: white;
+    border-radius: 14px;
+    padding: 1.4rem;
+    margin-bottom: 1.2rem;
+    border: 1px solid #E5E7EB;
+    transition: all 0.2s ease;
+}
+
+.place-card:hover {
+    box-shadow: 0 6px 20px rgba(0,0,0,0.08);
+    transform: translateY(-2px);
+}
+
+.place-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+}
+
+.place-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #111827;
+}
+
+.place-meta {
+    font-size: 0.8rem;
+    color: #6B7280;
+}
+
+.place-desc {
+    font-size: 0.9rem;
+    color: #4B5563;
+    margin-top: 8px;
+}
+
+/* BADGES */
+.badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    margin-right: 6px;
+    margin-top: 6px;
+}
+
+.badge-type {
+    background: #EEF2FF;
+    color: #3730A3;
+}
+
+.badge-price {
+    background: #ECFDF5;
+    color: #065F46;
+}
+
+/* HORARIO */
+.hora-slot {
+    font-size: 0.8rem;
+    color: #374151;
+    margin-bottom: 6px;
+}
+
+/* BOTÓN */
+.swap-btn button {
+    background: #111827;
+    color: white;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    padding: 0.4rem 1rem;
+}
+
+/* LINKS */
+.links a {
+    font-size: 0.85rem;
+    color: #2563EB;
+    text-decoration: none;
+}
+
+.links a:hover {
+    text-decoration: underline;
+}
+
+/* HEADER DÍA */
+.day-header {
+    font-size: 1.3rem;
+    font-weight: 600;
+    margin: 2rem 0 1rem 0;
+    color: #111827;
+    border-bottom: 1px solid #E5E7EB;
+    padding-bottom: 6px;
+}
+
 </style>
 """, unsafe_allow_html=True)
-
 # ─────────────────────────────────────────────
 #  CONSTANTES
 # ─────────────────────────────────────────────
@@ -1015,44 +1088,61 @@ with tab_planning:
                 f'<a href="{maps_url}" target="_blank" rel="noopener">🗺️ Ver en Google Maps</a>'
                 f'</div>'
             )
-            st.markdown(
-                f'<div class="place-card">'
-                f'{hora_html}'
-                f'<h4>{act["nombre"]}</h4>'
-                f'<div class="meta">📍 {act["direccion"]} &nbsp;|&nbsp; {n_rev}</div>'
-                f'<span class="badge badge-type">{act["tipo"]}</span>'
-                f'<span class="badge badge-price">{act["precio"]}</span>'
-                f'{horario_badge}'
-                f'<div style="margin-top:8px;">{stars} '
-                f'<span style="color:#888;font-size:0.85rem;">{act["rating"]:.1f}/5</span></div>'
-                f'{desc}'
-                f'{links_html}'
-                f'</div>',
-                unsafe_allow_html=True,
-            )
+            col_main, col_btn = st.columns([6,1])
 
-            col_btn, _ = st.columns([2, 5])
-            with col_btn:
-                if st.button(
-                    f"🔄 Cambiar por otra de {act['tipo']}",
-                    key=f"swap_{dia}_{act['place_id']}",
-                    use_container_width=True,
-                ):
-                    df_nuevo, nombre_nuevo = swap_actividad(
-                        st.session_state.df_plan,
-                        st.session_state.df_todos,
-                        act['place_id'],
-                    )
-                    if df_nuevo is None:
-                        st.warning(f"No hay más lugares disponibles de tipo {act['tipo']}.")
-                    else:
-                        fi = st.session_state.fechas_res[0] if st.session_state.fechas_res else None
-                        hc = st.session_state.hotel_coords_res
-                        df_act, descs = asignar_horas_df(df_nuevo, fi, hc)
-                        st.session_state.df_plan = df_act
-                        st.session_state.descansos_dia = descs
-                        st.toast(f"Cambiado por «{nombre_nuevo}»", icon="🔄")
-                        st.rerun()
+with col_main:
+    st.markdown(
+        f"""
+        <div class="place-card">
+            <div class="place-header">
+                <div>
+                    <div class="hora-slot">🕐 {formato_hora(act["hora_ini"])} – {formato_hora(act["hora_fin"])}</div>
+                    <div class="place-title">{act["nombre"]}</div>
+                    <div class="place-meta">📍 {act["direccion"]} · {n_rev}</div>
+                </div>
+            </div>
+
+            <div>
+                <span class="badge badge-type">{act["tipo"]}</span>
+                <span class="badge badge-price">{act["precio"]}</span>
+            </div>
+
+            <div style="margin-top:6px;">
+                {'⭐' * int(round(act['rating']))}
+                <span style="font-size:0.85rem;color:#6B7280;">{act["rating"]:.1f}</span>
+            </div>
+
+            <div class="place-desc">{act["descripcion"]}</div>
+
+            <div class="links" style="margin-top:10px;">
+                <a href="{maps_url}" target="_blank">Ver en Maps</a>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+with col_btn:
+    if st.button(
+        "🔄",
+        key=f"swap_{dia}_{act['place_id']}",
+        help="Cambiar actividad",
+    ):
+        df_nuevo, nombre_nuevo = swap_actividad(
+            st.session_state.df_plan,
+            st.session_state.df_todos,
+            act['place_id'],
+        )
+        if df_nuevo is None:
+            st.warning(f"No hay más lugares disponibles de tipo {act['tipo']}.")
+        else:
+            fi = st.session_state.fechas_res[0] if st.session_state.fechas_res else None
+            hc = st.session_state.hotel_coords_res
+            df_act, descs = asignar_horas_df(df_nuevo, fi, hc)
+            st.session_state.df_plan = df_act
+            st.session_state.descansos_dia = descs
+            st.toast(f"Cambiado por «{nombre_nuevo}»", icon="🔄")
+            st.rerun()
 
             with st.expander(f"Más detalles de {act['nombre']}"):
                 with st.spinner("Cargando detalles..."):
