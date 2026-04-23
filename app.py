@@ -481,10 +481,8 @@ def _planificar_dia(grupo_df, fecha_dia, hotel_coords):
 
         # Traslado
         if prev_loc and pd.notna(row.get('lat')) and pd.notna(row.get('lng')):
-            viaje, km_tras = tiempo_distancia_google(
-                prev_loc[0], prev_loc[1],
-                row['lat'], row['lng']
-            )
+            km_tras = haversine(prev_loc[0], prev_loc[1], row['lat'], row['lng'])
+            viaje = tiempo_desplazamiento(prev_loc[0], prev_loc[1], row['lat'], row['lng'])
         else:
             km_tras = 0.0
             viaje = 0.0
