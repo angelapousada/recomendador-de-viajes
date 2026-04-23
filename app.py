@@ -646,10 +646,10 @@ def obtener_detalles(place_id):
     )
     return r.json()
 
-    @st.cache_data(ttl=3600, show_spinner=False)
-    def tiempo_google(lat1, lng1, lat2, lng2, modo="WALK"):
-        if None in (lat1, lng1, lat2, lng2) or not API_KEY:
-            return 0.0
+@st.cache_data(ttl=3600, show_spinner=False)
+def tiempo_google(lat1, lng1, lat2, lng2, modo="WALK"):
+    if None in (lat1, lng1, lat2, lng2) or not API_KEY:
+        return 0.0
 
         url = "https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix"
 
@@ -684,7 +684,7 @@ def obtener_detalles(place_id):
         except Exception:
             pass
 
-        return 0.0
+    return 0.0
 
 def foto_url(photo_ref, max_w=640, max_h=480):
     if not photo_ref or not API_KEY:
