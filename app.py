@@ -981,7 +981,7 @@ dias_res      = st.session_state.dias_res
 act_res       = st.session_state.act_por_dia_res
 
 if len(df_plan) == 0:
-    st.warning("⚠️ No hay lugares con esos filtros. Baja el rating mínimo o amplía el presupuesto.")
+    st.warning("No hay lugares con esos filtros. Baja el rating mínimo o amplía el presupuesto.")
     st.stop()
 
 # Stats
