@@ -23,54 +23,71 @@ st.set_page_config(
 st.markdown("""
 <style>
 
-/* Card real */
 .card {
     background: white;
     border-radius: 14px;
-    padding: 1rem;
+    padding: 18px;
+    margin-bottom: 16px;
     border: 1px solid #E5E7EB;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-    margin-bottom: 1rem;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.06);
 }
 
-/* Título */
+/* separación interna */
+.card-section {
+    margin-bottom: 8px;
+}
+
 .card-title {
-    font-size: 1.05rem;
+    font-size: 1.2rem;
     font-weight: 600;
     color: #1A1A2E;
 }
 
-/* Meta */
 .card-meta {
-    font-size: 0.8rem;
-    color: #666;
+    font-size: 0.85rem;
+    color: #6B7280;
 }
 
-/* Descripción */
 .card-desc {
     font-size: 0.9rem;
     color: #444;
-    margin-top: 6px;
+    margin-top: 8px;
+    line-height: 1.4;
 }
 
-/* Badges */
+.card-footer {
+    margin-top: 10px;
+}
+
+/* badges */
 .badge {
     display: inline-block;
-    padding: 3px 8px;
-    border-radius: 12px;
+    padding: 4px 10px;
+    border-radius: 20px;
     font-size: 0.75rem;
     margin-right: 6px;
 }
 
-.badge-type { background: #EEF2FF; color: #3730A3; }
-.badge-price { background: #ECFDF5; color: #065F46; }
+.badge-type {
+    background: #EEF2FF;
+    color: #3730A3;
+}
 
-/* Hora */
+.badge-price {
+    background: #ECFDF5;
+    color: #065F46;
+}
+
 .time {
     font-size: 0.8rem;
+    color: #555;
     font-weight: 500;
-    color: #444;
-    margin-bottom: 4px;
+}
+
+/* botón más limpio */
+div.stButton > button {
+    border-radius: 8px !important;
+    height: 36px;
 }
 
 </style>
@@ -1077,68 +1094,80 @@ with tab_explorar:
             f'&query={quote(row["nombre"])}'
             f'&query_place_id={row["place_id"]}'
         )
-        with st.container():
-    
-            st.markdown('<div class="card">', unsafe_allow_html=True)
+with st.container():
+    st.markdown('<div class="card">', unsafe_allow_html=True)
 
-            col1, col2 = st.columns([8,1])
+    col1, col2 = st.columns([8,1])
 
-            with col1:
-                if pd.notna(act.get('hora_ini')):
-                    st.markdown(
-                        f'<div class="time">🕐 {formato_hora(act["hora_ini"])} – {formato_hora(act["hora_fin"])}</div>',
-                        unsafe_allow_html=True
-                    )
+    with col1:
 
-                st.markdown(
-                    f'<div class="card-title">{act["nombre"]}</div>',
-                    unsafe_allow_html=True
-                )
+        # 🕐 HORA
+        if pd.notna(act.get('hora_ini')):
+            st.markdown(
+                f'<div class="time">🕐 {formato_hora(act["hora_ini"])} – {formato_hora(act["hora_fin"])}</div>',
+                unsafe_allow_html=True
+            )
 
-                st.markdown(
-                    f'<div class="card-meta">📍 {act["direccion"]} · {n_rev}</div>',
-                    unsafe_allow_html=True
-                )
+        # 🏷️ TITULO
+        st.markdown(
+            f'<div class="card-title">{act["nombre"]}</div>',
+            unsafe_allow_html=True
+        )
 
-                st.markdown(
-                    f'<span class="badge badge-type">{act["tipo"]}</span>'
-                    f'<span class="badge badge-price">{act["precio"]}</span>',
-                    unsafe_allow_html=True
-                )
+        # 📍 DIRECCIÓN
+        st.markdown(
+            f'<div class="card-meta">📍 {act["direccion"]} · {n_rev}</div>',
+            unsafe_allow_html=True
+        )
 
-                st.markdown(
-                    f'<div style="margin-top:6px;">{"⭐"*int(round(act["rating"]))} '
-                    f'<span style="font-size:0.8rem;color:#888;">{act["rating"]:.1f}</span></div>',
-                    unsafe_allow_html=True
-                )
+        # 🏷️ BADGES
+        st.markdown(
+            f'<div class="card-section">'
+            f'<span class="badge badge-type">{act["tipo"]}</span>'
+            f'<span class="badge badge-price">{act["precio"]}</span>'
+            f'</div>',
+            unsafe_allow_html=True
+        )
 
-                if act["descripcion"]:
-                    st.markdown(
-                        f'<div class="card-desc">{act["descripcion"]}</div>',
-                        unsafe_allow_html=True
-                    )
+        # ⭐ RATING
+        st.markdown(
+            f'<div class="card-section">{"⭐"*int(round(act["rating"]))} '
+            f'<span style="font-size:0.85rem;color:#666;">{act["rating"]:.1f}/5</span></div>',
+            unsafe_allow_html=True
+        )
 
-                st.markdown(
-                    f'<a href="{maps_url}" target="_blank">🗺️ Ver en Maps</a>',
-                    unsafe_allow_html=True
-                )
+        # 📝 DESCRIPCIÓN
+        if act["descripcion"]:
+            st.markdown(
+                f'<div class="card-desc">{act["descripcion"]}</div>',
+                unsafe_allow_html=True
+            )
 
-            with col2:
-                if st.button("🔄", key=f"swap_{dia}_{act['place_id']}"):
-                    df_nuevo, nombre_nuevo = swap_actividad(
-                        st.session_state.df_plan,
-                        st.session_state.df_todos,
-                        act['place_id'],
-                    )
-                    if df_nuevo is None:
-                        st.warning(f"No hay más lugares disponibles de tipo {act['tipo']}.")
-                    else:
-                        fi = st.session_state.fechas_res[0] if st.session_state.fechas_res else None
-                        hc = st.session_state.hotel_coords_res
-                        df_act, descs = asignar_horas_df(df_nuevo, fi, hc)
-                        st.session_state.df_plan = df_act
-                        st.session_state.descansos_dia = descs
-                        st.toast(f"Cambiado por «{nombre_nuevo}»", icon="🔄")
-                        st.rerun()
+        # 🔗 LINK
+        st.markdown(
+            f'<div class="card-footer">'
+            f'<a href="{maps_url}" target="_blank">🗺️ Ver en Google Maps</a>'
+            f'</div>',
+            unsafe_allow_html=True
+        )
 
-            st.markdown('</div>', unsafe_allow_html=True)
+    # 🔄 BOTÓN (alineado bien)
+    with col2:
+        if st.button("🔄", key=f"swap_{dia}_{act['place_id']}"):
+            df_nuevo, nombre_nuevo = swap_actividad(
+                st.session_state.df_plan,
+                st.session_state.df_todos,
+                act['place_id'],
+            )
+            if df_nuevo is None:
+                st.warning(f"No hay más lugares disponibles de tipo {act['tipo']}.")
+            else:
+                fi = st.session_state.fechas_res[0] if st.session_state.fechas_res else None
+                hc = st.session_state.hotel_coords_res
+                df_act, descs = asignar_horas_df(df_nuevo, fi, hc)
+                st.session_state.df_plan = df_act
+                st.session_state.descansos_dia = descs
+                st.toast(f"Cambiado por «{nombre_nuevo}»", icon="🔄")
+                st.rerun()
+
+    st.markdown('</div>', unsafe_allow_html=True)
