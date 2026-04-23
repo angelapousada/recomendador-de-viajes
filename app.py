@@ -961,7 +961,7 @@ if st.session_state.df_plan is None:
     st.markdown("""
     <div class="empty-state">
         <h3>¿A dónde vamos?</h3>
-        <p>Configura tu viaje en el panel de la izquierda y pulsa <b>Generar Planning</b>.</p>
+        <p>Configura tu viaje en el panel de la izquierda y pulsa <b>Generar Itinerario</b>.</p>
     </div>
     """, unsafe_allow_html=True)
     st.stop()
@@ -999,7 +999,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-tab_planning, tab_mapa, tab_explorar = st.tabs(["Planning", "Mapa", "Explorar lugares"])
+tab_planning, tab_mapa, tab_explorar = st.tabs(["Itinerario", "Mapa", "Explorar lugares"])
 
 # ── TAB 1: PLANNING ──────────────────────────
 with tab_planning:
@@ -1192,7 +1192,7 @@ with tab_explorar:
     for _, row in df_vista.iterrows():
         n_rev = f"{int(row['n_reviews']):,} reseñas" if row['n_reviews'] else ""
         desc  = f'<div class="desc">{row["descripcion"]}</div>' if row["descripcion"] else ""
-        photo = foto_url(row.get('photo_ref'), max_w=640, max_h=480)
+        photo = foto_url(row.get('photo_ref'), min_w=200, max_h=200)
         if photo:
             foto_html = f'<img src="{photo}" class="explore-card-photo" alt="{row["nombre"]}"/>'
         else:
