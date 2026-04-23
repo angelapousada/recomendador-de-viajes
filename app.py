@@ -23,46 +23,54 @@ st.set_page_config(
 st.markdown("""
 <style>
 
-.place-card {
+/* Card real */
+.card {
     background: white;
-    border-radius: 16px;
-    padding: 1.2rem 1.4rem;
+    border-radius: 14px;
+    padding: 1rem;
+    border: 1px solid #E5E7EB;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
     margin-bottom: 1rem;
-    border-left: 4px solid #E8C547;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.05);
-
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 1rem;
 }
 
-.place-content {
-    flex: 1;
+/* Título */
+.card-title {
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: #1A1A2E;
 }
 
-.place-actions {
-    display: flex;
-    align-items: center;
-}
-
-/* Botón dentro de la card */
-.place-actions button {
-    background: #1A1A2E !important;
-    color: #E8C547 !important;
-    border-radius: 8px !important;
+/* Meta */
+.card-meta {
     font-size: 0.8rem;
-    padding: 0.4rem 0.6rem;
-    width: auto !important;
+    color: #666;
 }
 
-/* Mejor espaciado */
-.place-card h4 {
+/* Descripción */
+.card-desc {
+    font-size: 0.9rem;
+    color: #444;
+    margin-top: 6px;
+}
+
+/* Badges */
+.badge {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    margin-right: 6px;
+}
+
+.badge-type { background: #EEF2FF; color: #3730A3; }
+.badge-price { background: #ECFDF5; color: #065F46; }
+
+/* Hora */
+.time {
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: #444;
     margin-bottom: 4px;
-}
-
-.place-card .meta {
-    margin-bottom: 6px;
 }
 
 </style>
@@ -959,64 +967,21 @@ with tab_planning:
                 f'<a href="{maps_url}" target="_blank" rel="noopener">🗺️ Ver en Google Maps</a>'
                 f'</div>'
             )
-            col_card, col_btn = st.columns([10,1])
-
-with col_card:
-    st.markdown(
-        f"""
-        <div class="place-card">
-            
-            <div class="place-content">
-                {hora_html}
-                <h4>{act["nombre"]}</h4>
-                
-                <div class="meta">
-                    📍 {act["direccion"]} &nbsp;|&nbsp; {n_rev}
-                </div>
-
-                <span class="badge badge-type">{act["tipo"]}</span>
-                <span class="badge badge-price">{act["precio"]}</span>
-
-                {horario_badge}
-
-                <div style="margin-top:8px;">
-                    {'⭐' * int(round(act['rating']))}
-                    <span style="color:#888;font-size:0.85rem;">
-                        {act["rating"]:.1f}/5
-                    </span>
-                </div>
-
-                {desc}
-
-                {links_html}
-            </div>
-
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-with col_btn:
-    if st.button(
-        "🔄",
-        key=f"swap_{dia}_{act['place_id']}",
-        help="Cambiar actividad",
-    ):
-        df_nuevo, nombre_nuevo = swap_actividad(
-            st.session_state.df_plan,
-            st.session_state.df_todos,
-            act['place_id'],
-        )
-        if df_nuevo is None:
-            st.warning(f"No hay más lugares disponibles de tipo {act['tipo']}.")
-        else:
-            fi = st.session_state.fechas_res[0] if st.session_state.fechas_res else None
-            hc = st.session_state.hotel_coords_res
-            df_act, descs = asignar_horas_df(df_nuevo, fi, hc)
-            st.session_state.df_plan = df_act
-            st.session_state.descansos_dia = descs
-            st.toast(f"Cambiado por «{nombre_nuevo}»", icon="🔄")
-            st.rerun()
+            st.markdown(
+                f'<div class="place-card">'
+                f'{hora_html}'
+                f'<h4>{act["nombre"]}</h4>'
+                f'<div class="meta">📍 {act["direccion"]} &nbsp;|&nbsp; {n_rev}</div>'
+                f'<span class="badge badge-type">{act["tipo"]}</span>'
+                f'<span class="badge badge-price">{act["precio"]}</span>'
+                f'{horario_badge}'
+                f'<div style="margin-top:8px;">{stars} '
+                f'<span style="color:#888;font-size:0.85rem;">{act["rating"]:.1f}/5</span></div>'
+                f'{desc}'
+                f'{links_html}'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
 
             with st.expander(f"Más detalles de {act['nombre']}"):
                 with st.spinner("Cargando detalles..."):
@@ -1112,18 +1077,68 @@ with tab_explorar:
             f'&query={quote(row["nombre"])}'
             f'&query_place_id={row["place_id"]}'
         )
-        st.markdown(
-            f'<div class="place-card">'
-            f'<h4>{row["nombre"]}</h4>'
-            f'<div class="meta">📍 {row["direccion"]} &nbsp;|&nbsp; {n_rev}</div>'
-            f'<span class="badge badge-type">{row["tipo"]}</span>'
-            f'<span class="badge badge-price">{row["precio"]}</span>'
-            f'<div style="margin-top:8px;">{stars} '
-            f'<span style="color:#888;font-size:0.85rem;">{row["rating"]:.1f}/5</span></div>'
-            f'{desc}'
-            f'<div class="links">'
-            f'<a href="{maps_url}" target="_blank" rel="noopener">🗺️ Ver en Google Maps</a>'
-            f'</div>'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
+        with st.container():
+    
+            st.markdown('<div class="card">', unsafe_allow_html=True)
+
+            col1, col2 = st.columns([8,1])
+
+            with col1:
+                if pd.notna(act.get('hora_ini')):
+                    st.markdown(
+                        f'<div class="time">🕐 {formato_hora(act["hora_ini"])} – {formato_hora(act["hora_fin"])}</div>',
+                        unsafe_allow_html=True
+                    )
+
+                st.markdown(
+                    f'<div class="card-title">{act["nombre"]}</div>',
+                    unsafe_allow_html=True
+                )
+
+                st.markdown(
+                    f'<div class="card-meta">📍 {act["direccion"]} · {n_rev}</div>',
+                    unsafe_allow_html=True
+                )
+
+                st.markdown(
+                    f'<span class="badge badge-type">{act["tipo"]}</span>'
+                    f'<span class="badge badge-price">{act["precio"]}</span>',
+                    unsafe_allow_html=True
+                )
+
+                st.markdown(
+                    f'<div style="margin-top:6px;">{"⭐"*int(round(act["rating"]))} '
+                    f'<span style="font-size:0.8rem;color:#888;">{act["rating"]:.1f}</span></div>',
+                    unsafe_allow_html=True
+                )
+
+                if act["descripcion"]:
+                    st.markdown(
+                        f'<div class="card-desc">{act["descripcion"]}</div>',
+                        unsafe_allow_html=True
+                    )
+
+                st.markdown(
+                    f'<a href="{maps_url}" target="_blank">🗺️ Ver en Maps</a>',
+                    unsafe_allow_html=True
+                )
+
+            with col2:
+                if st.button("🔄", key=f"swap_{dia}_{act['place_id']}"):
+                    df_nuevo, nombre_nuevo = swap_actividad(
+                        st.session_state.df_plan,
+                        st.session_state.df_todos,
+                        act['place_id'],
+                    )
+                    if df_nuevo is None:
+                        st.warning(f"No hay más lugares disponibles de tipo {act['tipo']}.")
+                    else:
+                        fi = st.session_state.fechas_res[0] if st.session_state.fechas_res else None
+                        hc = st.session_state.hotel_coords_res
+                        df_act, descs = asignar_horas_df(df_nuevo, fi, hc)
+                        st.session_state.df_plan = df_act
+                        st.session_state.descansos_dia = descs
+                        st.toast(f"Cambiado por «{nombre_nuevo}»", icon="🔄")
+                        st.rerun()
+
+            st.markdown('</div>', unsafe_allow_html=True)
