@@ -22,145 +22,72 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
 
+/* Fuente global */
 html, body, [class*="css"] {
-    font-family: 'Inter', sans-serif;
+    font-family: Inter, sans-serif;
 }
 
-.main {
-    background-color: #F9FAFB;
+/* Fondo */
+.stApp {
+    background-color: #F5F7FA;
 }
 
+/* Contenedor principal */
 .block-container {
     padding-top: 2rem;
-    padding-bottom: 2rem;
+    max-width: 1200px;
 }
 
 /* SIDEBAR */
-[data-testid="stSidebar"] {
+section[data-testid="stSidebar"] {
     background-color: #111827;
 }
-
-[data-testid="stSidebar"] * {
+section[data-testid="stSidebar"] * {
     color: #E5E7EB !important;
 }
 
-/* HERO */
-.hero {
-    background: linear-gradient(135deg, #111827, #1F2937);
-    border-radius: 16px;
-    padding: 2.5rem;
-    color: white;
-    margin-bottom: 2rem;
-}
-
-.hero h1 {
-    font-size: 2.2rem;
-    margin-bottom: 0.4rem;
-}
-
-.hero p {
-    color: #9CA3AF;
+/* BOTONES (importante override real) */
+div.stButton > button {
+    background-color: #111827 !important;
+    color: white !important;
+    border-radius: 8px !important;
+    border: none;
 }
 
 /* CARDS */
-.place-card {
+.custom-card {
     background: white;
-    border-radius: 14px;
-    padding: 1.4rem;
-    margin-bottom: 1.2rem;
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 12px;
     border: 1px solid #E5E7EB;
-    transition: all 0.2s ease;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.05);
 }
 
-.place-card:hover {
-    box-shadow: 0 6px 20px rgba(0,0,0,0.08);
-    transform: translateY(-2px);
-}
-
-.place-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-}
-
-.place-title {
-    font-size: 1.1rem;
+/* TITULOS */
+.card-title {
     font-weight: 600;
+    font-size: 16px;
     color: #111827;
 }
 
-.place-meta {
-    font-size: 0.8rem;
+/* META */
+.card-meta {
+    font-size: 12px;
     color: #6B7280;
 }
 
-.place-desc {
-    font-size: 0.9rem;
+/* DESCRIPCION */
+.card-desc {
+    font-size: 13px;
     color: #4B5563;
-    margin-top: 8px;
-}
-
-/* BADGES */
-.badge {
-    display: inline-block;
-    padding: 4px 10px;
-    border-radius: 20px;
-    font-size: 0.75rem;
-    margin-right: 6px;
     margin-top: 6px;
-}
-
-.badge-type {
-    background: #EEF2FF;
-    color: #3730A3;
-}
-
-.badge-price {
-    background: #ECFDF5;
-    color: #065F46;
-}
-
-/* HORARIO */
-.hora-slot {
-    font-size: 0.8rem;
-    color: #374151;
-    margin-bottom: 6px;
-}
-
-/* BOTÓN */
-.swap-btn button {
-    background: #111827;
-    color: white;
-    border-radius: 8px;
-    font-size: 0.85rem;
-    padding: 0.4rem 1rem;
-}
-
-/* LINKS */
-.links a {
-    font-size: 0.85rem;
-    color: #2563EB;
-    text-decoration: none;
-}
-
-.links a:hover {
-    text-decoration: underline;
-}
-
-/* HEADER DÍA */
-.day-header {
-    font-size: 1.3rem;
-    font-weight: 600;
-    margin: 2rem 0 1rem 0;
-    color: #111827;
-    border-bottom: 1px solid #E5E7EB;
-    padding-bottom: 6px;
 }
 
 </style>
 """, unsafe_allow_html=True)
+
 # ─────────────────────────────────────────────
 #  CONSTANTES
 # ─────────────────────────────────────────────
@@ -183,22 +110,29 @@ PRECIO_NUM = {
 }
 TIPOS_GOOGLE = {
     '🏛️ Atracciones':  'tourist_attraction',
+    '🎨 Museos':       'museum',
+    '🎭 Arte':         'art_gallery',
     '🍽️ Restaurantes': 'restaurant',
     '☕ Cafeterías':   'cafe',
     '🍻 Bares/Pubs':   'bar',
     '🌿 Parques':      'park',
     '🎡 Ocio':         'amusement_park',
+    '🎬 Cines':        'movie_theater',
 }
 COLORES_DIA = ['blue', 'red', 'green', 'purple', 'orange', 'darkblue', 'cadetblue']
 ICONOS_TIPO = {
     '🏛️ Atracciones': 'star',       '🍽️ Restaurantes': 'cutlery',
     '🎨 Museos':       'book',       '🌿 Parques':      'leaf',
-    '🎡 Ocio':         'fire',
+    '🎭 Arte':         'picture',    '🎡 Ocio':         'fire',
     '☕ Cafeterías':   'glass',      '🍻 Bares/Pubs':   'glass',
+    '🎬 Cines':        'film',
 }
 TIPO_PESO = {
     '🏛️ Atracciones':  1.30,
+    '🎨 Museos':       1.25,
+    '🎭 Arte':         1.10,
     '🎡 Ocio':         1.05,
+    '🎬 Cines':        1.00,
     '🍽️ Restaurantes': 1.00,
     '🍻 Bares/Pubs':   0.95,
     '☕ Cafeterías':   0.90,
@@ -206,20 +140,26 @@ TIPO_PESO = {
 }
 TIPO_IDEAL_HORAS = {
     '☕ Cafeterías':   [9.5, 11.0, 17.0],
+    '🎨 Museos':       [10.0, 11.5, 16.0],
     '🏛️ Atracciones': [10.0, 11.5, 16.0, 17.5],
+    '🎭 Arte':         [11.0, 16.0],
     '🌿 Parques':      [11.0, 16.0],
     '🍽️ Restaurantes': [13.5, 21.0],
     '🎡 Ocio':         [16.0, 18.5, 20.0],
+    '🎬 Cines':        [18.5, 21.0],
     '🍻 Bares/Pubs':   [21.0, 22.5, 18.5],
 }
 HORA_PREF_ORDEN = [
-    '🍻 Bares/Pubs', '🍽️ Restaurantes',
+    '🍻 Bares/Pubs', '🍽️ Restaurantes', '🎬 Cines',
     '☕ Cafeterías', '🎡 Ocio',
-    '🏛️ Atracciones', '🌿 Parques',
+    '🏛️ Atracciones', '🎨 Museos', '🎭 Arte', '🌿 Parques',
 ]
 TIPO_DURACION = {   # horas
     '🏛️ Atracciones':  1.5,
+    '🎨 Museos':       2.0,
+    '🎭 Arte':         1.5,
     '🎡 Ocio':         2.5,
+    '🎬 Cines':        2.5,
     '🍽️ Restaurantes': 1.5,
     '☕ Cafeterías':   0.75,
     '🍻 Bares/Pubs':   1.5,
@@ -227,7 +167,10 @@ TIPO_DURACION = {   # horas
 }
 CATEGORIA_TIPO = {
     '🏛️ Atracciones':  'cultural',
+    '🎨 Museos':       'cultural',
+    '🎭 Arte':         'cultural',
     '🎡 Ocio':         'ocio',
+    '🎬 Cines':        'ocio',
     '🍽️ Restaurantes': 'comida',
     '☕ Cafeterías':   'comida',
     '🍻 Bares/Pubs':   'comida',
@@ -255,22 +198,19 @@ def get_headers(field_mask):
     }
 
 @st.cache_data(ttl=600, show_spinner=False)
-def _autocompletar(texto, tipos_tuple=None, bias_lat=None, bias_lng=None,
-                   strict_location=False, radio_m=30000.0):
+def _autocompletar(texto, tipos_tuple=None, bias_lat=None, bias_lng=None):
     if not texto or len(texto.strip()) < 2 or not API_KEY:
         return []
     body = {'input': texto, 'languageCode': 'es'}
     if tipos_tuple:
         body['includedPrimaryTypes'] = list(tipos_tuple)
     if bias_lat is not None and bias_lng is not None:
-        circle = {
-            'center': {'latitude': bias_lat, 'longitude': bias_lng},
-            'radius': float(radio_m),
+        body['locationBias'] = {
+            'circle': {
+                'center': {'latitude': bias_lat, 'longitude': bias_lng},
+                'radius': 30000.0,
+            }
         }
-        if strict_location:
-            body['locationRestriction'] = {'circle': circle}
-        else:
-            body['locationBias'] = {'circle': circle}
     try:
         r = requests.post(
             AUTOCOMPLETE_URL,
@@ -294,16 +234,11 @@ def buscar_ciudades(texto):
     return _autocompletar(texto, tipos_tuple=('(cities)',))
 
 def hacer_buscador_hoteles(lat, lng):
-    """Sugiere alojamientos Y direcciones estrictamente dentro de la ciudad
-    (radio 15 km). Permite tanto hoteles como direcciones/Airbnbs."""
     def _buscar(texto):
-        if lat is None or lng is None:
-            return []
         return _autocompletar(
             texto,
+            tipos_tuple=('lodging',),
             bias_lat=lat, bias_lng=lng,
-            strict_location=True,
-            radio_m=15000.0,
         )
     return _buscar
 
@@ -535,42 +470,6 @@ def _planificar_dia(grupo_df, fecha_dia, hotel_coords):
 
     return asignaciones, descansos
 
-def swap_actividad(df_plan, df_todos, place_id):
-    """Sustituye la actividad place_id por otra del mismo tipo del pool df_todos
-    que no esté ya en df_plan. Devuelve (df_plan_nuevo, nombre_nuevo) o (None, None)
-    si no hay candidato. No recalcula horas: hazlo después con asignar_horas_df."""
-    if df_plan is None or df_todos is None or df_plan.empty:
-        return None, None
-    fila = df_plan[df_plan['place_id'] == place_id]
-    if fila.empty:
-        return None, None
-    actual = fila.iloc[0]
-    tipo_actual = actual['tipo']
-    dia = int(actual['dia'])
-
-    usados = set(df_plan['place_id'].tolist())
-    candidatos = df_todos[
-        (df_todos['tipo'] == tipo_actual) &
-        (~df_todos['place_id'].isin(usados))
-    ].sort_values('rating', ascending=False)
-    if candidatos.empty:
-        return None, None
-
-    nuevo = candidatos.iloc[0]
-    # Copiamos el nuevo con las columnas esperadas por df_plan
-    fila_nueva = {col: nuevo[col] if col in nuevo.index else None for col in df_plan.columns}
-    fila_nueva['dia'] = dia
-    fila_nueva['hora_ini'] = pd.NA
-    fila_nueva['hora_fin'] = pd.NA
-
-    df_nuevo = df_plan[df_plan['place_id'] != place_id].copy()
-    df_nuevo = pd.concat([df_nuevo, pd.DataFrame([fila_nueva])], ignore_index=True)
-    # Invalidamos horas del día afectado para que se recalcule limpio
-    df_nuevo.loc[df_nuevo['dia'] == dia, 'hora_ini'] = pd.NA
-    df_nuevo.loc[df_nuevo['dia'] == dia, 'hora_fin'] = pd.NA
-    df_nuevo = df_nuevo.sort_values(['dia']).reset_index(drop=True)
-    return df_nuevo, nuevo['nombre']
-
 def asignar_horas_df(df_plan, fecha_ini, hotel_coords):
     """Añade hora_ini/hora_fin a cada actividad de df_plan y devuelve
     (df ordenado cronológicamente, dict {dia: [descansos/traslados]})."""
@@ -658,7 +557,7 @@ def extraer(lugar, tipo_nombre):
         'tipo':            tipo_nombre,
         'rating':          lugar.get('rating'),
         'n_reviews':       lugar.get('userRatingCount', 0),
-        'precio':          PRECIO_LABEL.get(pk, 'Sin precio estipulado'),
+        'precio':          PRECIO_LABEL.get(pk, '❓ Desconocido'),
         'precio_num':      PRECIO_NUM.get(pk),
         'direccion':       lugar.get('formattedAddress', ''),
         'lat':             lugar.get('location', {}).get('latitude'),
@@ -777,7 +676,6 @@ for key, default in {
     'fechas_res': None, 'hotel_res': None, 'regimen_res': 'Solo alojamiento',
     'coords_ciudad': (None, None),
     'descansos_dia': {},
-    'hotel_coords_res': None,
 }.items():
     if key not in st.session_state:
         st.session_state[key] = default
@@ -809,19 +707,13 @@ with st.sidebar:
             st.session_state.coords_ciudad = (lat_ciudad, lng_ciudad)
 
     st.markdown("### 🏨 Alojamiento (opcional)")
-    hotel = None
-    if lat_ciudad is not None and lng_ciudad is not None:
-        # Clave ligada a la ciudad → al cambiar de ciudad se resetea la selección
-        hotel = st_searchbox(
-            hacer_buscador_hoteles(lat_ciudad, lng_ciudad),
-            key=f"hotel_sb_{ciudad}",
-            placeholder="Hotel, hostal o dirección (Airbnb)…",
-            label="Hotel / dirección (en la ciudad elegida)",
-            clear_on_submit=False,
-        )
-    else:
-        st.caption("⬅ Primero elige una ciudad para poder buscar alojamiento allí.")
-
+    hotel = st_searchbox(
+        hacer_buscador_hoteles(lat_ciudad, lng_ciudad),
+        key="hotel_sb",
+        placeholder="Nombre del hotel o dirección…",
+        label="Hotel / dirección",
+        clear_on_submit=False,
+    )
     regimen = st.radio(
         "Régimen",
         options=['Solo alojamiento', 'Media pensión', 'Pensión completa'],
@@ -857,9 +749,9 @@ with st.sidebar:
 
     st.markdown("### 🎯 Preferencias")
     gustos = st.multiselect(
-        "Activiades a elegir",
+        "Tipos de lugar",
         options=list(TIPOS_GOOGLE.keys()),
-        default=['🏛️ Atracciones', '☕ Cafeterías'],
+        default=['🏛️ Atracciones', '🎨 Museos', '🍽️ Restaurantes', '☕ Cafeterías'],
     )
     if not gustos:
         gustos = list(TIPOS_GOOGLE.keys())
@@ -955,7 +847,6 @@ if buscar:
     st.session_state.act_por_dia_res  = act_por_dia
     st.session_state.fechas_res       = (fecha_ini, fecha_fin)
     st.session_state.hotel_res        = hotel if hotel else None
-    st.session_state.hotel_coords_res = hotel_coords
     st.session_state.regimen_res      = regimen
     st.session_state.descansos_dia    = descansos_por_dia
 
@@ -1088,61 +979,21 @@ with tab_planning:
                 f'<a href="{maps_url}" target="_blank" rel="noopener">🗺️ Ver en Google Maps</a>'
                 f'</div>'
             )
-            col_main, col_btn = st.columns([6,1])
-
-with col_main:
-    st.markdown(
-        f"""
-        <div class="place-card">
-            <div class="place-header">
-                <div>
-                    <div class="hora-slot">🕐 {formato_hora(act["hora_ini"])} – {formato_hora(act["hora_fin"])}</div>
-                    <div class="place-title">{act["nombre"]}</div>
-                    <div class="place-meta">📍 {act["direccion"]} · {n_rev}</div>
-                </div>
-            </div>
-
-            <div>
-                <span class="badge badge-type">{act["tipo"]}</span>
-                <span class="badge badge-price">{act["precio"]}</span>
-            </div>
-
-            <div style="margin-top:6px;">
-                {'⭐' * int(round(act['rating']))}
-                <span style="font-size:0.85rem;color:#6B7280;">{act["rating"]:.1f}</span>
-            </div>
-
-            <div class="place-desc">{act["descripcion"]}</div>
-
-            <div class="links" style="margin-top:10px;">
-                <a href="{maps_url}" target="_blank">Ver en Maps</a>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-with col_btn:
-    if st.button(
-        "🔄",
-        key=f"swap_{dia}_{act['place_id']}",
-        help="Cambiar actividad",
-    ):
-        df_nuevo, nombre_nuevo = swap_actividad(
-            st.session_state.df_plan,
-            st.session_state.df_todos,
-            act['place_id'],
-        )
-        if df_nuevo is None:
-            st.warning(f"No hay más lugares disponibles de tipo {act['tipo']}.")
-        else:
-            fi = st.session_state.fechas_res[0] if st.session_state.fechas_res else None
-            hc = st.session_state.hotel_coords_res
-            df_act, descs = asignar_horas_df(df_nuevo, fi, hc)
-            st.session_state.df_plan = df_act
-            st.session_state.descansos_dia = descs
-            st.toast(f"Cambiado por «{nombre_nuevo}»", icon="🔄")
-            st.rerun()
+            st.markdown(
+                f'<div class="place-card">'
+                f'{hora_html}'
+                f'<h4>{act["nombre"]}</h4>'
+                f'<div class="meta">📍 {act["direccion"]} &nbsp;|&nbsp; {n_rev}</div>'
+                f'<span class="badge badge-type">{act["tipo"]}</span>'
+                f'<span class="badge badge-price">{act["precio"]}</span>'
+                f'{horario_badge}'
+                f'<div style="margin-top:8px;">{stars} '
+                f'<span style="color:#888;font-size:0.85rem;">{act["rating"]:.1f}/5</span></div>'
+                f'{desc}'
+                f'{links_html}'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
 
             with st.expander(f"Más detalles de {act['nombre']}"):
                 with st.spinner("Cargando detalles..."):
