@@ -50,6 +50,10 @@ h1, h2, h3 { font-family: 'DM Serif Display', serif !important; }
 .place-card .links { margin-top: 10px; font-size: 0.85rem; }
 .place-card .links a { color: #0F3460; text-decoration: none; margin-right: 14px; }
 .place-card .links a:hover { text-decoration: underline; }
+.descanso { background: #FFF8E1; color: #6B5615; border-radius: 10px; padding: 8px 14px; margin: 6px 0; font-size: 0.88rem; border-left: 3px solid #E8C547; }
+.descanso.traslado { background: #EEF2FF; color: #3730A3; border-left-color: #6366F1; }
+.badge-horario { background: #E0F2FE; color: #075985; }
+.badge-cerrado { background: #FEE2E2; color: #991B1B; }
 .badge { display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 500; margin-right: 6px; }
 .badge-type  { background: #EEF2FF; color: #4338CA; }
 .badge-price { background: #ECFDF5; color: #065F46; }
@@ -93,11 +97,11 @@ DETAIL_URL       = 'https://places.googleapis.com/v1/places/'
 AUTOCOMPLETE_URL = 'https://places.googleapis.com/v1/places:autocomplete'
 
 PRECIO_LABEL = {
-    'PRICE_LEVEL_FREE':           '🆓 Gratis',
-    'PRICE_LEVEL_INEXPENSIVE':    '💚 Económico',
-    'PRICE_LEVEL_MODERATE':       '💛 Moderado',
-    'PRICE_LEVEL_EXPENSIVE':      '🟠 Caro',
-    'PRICE_LEVEL_VERY_EXPENSIVE': '🔴 Muy caro',
+    'PRICE_LEVEL_FREE':           'Gratis',
+    'PRICE_LEVEL_INEXPENSIVE':    'Hasta 50 €',
+    'PRICE_LEVEL_MODERATE':       '50 – 150 €',
+    'PRICE_LEVEL_EXPENSIVE':      '150 – 300 €',
+    'PRICE_LEVEL_VERY_EXPENSIVE': '+300 €',
 }
 PRECIO_NUM = {
     'PRICE_LEVEL_FREE': 0, 'PRICE_LEVEL_INEXPENSIVE': 1,
@@ -150,6 +154,30 @@ HORA_PREF_ORDEN = [
     '☕ Cafeterías', '🎡 Ocio',
     '🏛️ Atracciones', '🎨 Museos', '🎭 Arte', '🌿 Parques',
 ]
+TIPO_DURACION = {   # horas
+    '🏛️ Atracciones':  1.5,
+    '🎨 Museos':       2.0,
+    '🎭 Arte':         1.5,
+    '🎡 Ocio':         2.5,
+    '🎬 Cines':        2.5,
+    '🍽️ Restaurantes': 1.5,
+    '☕ Cafeterías':   0.75,
+    '🍻 Bares/Pubs':   1.5,
+    '🌿 Parques':      1.0,
+}
+CATEGORIA_TIPO = {
+    '🏛️ Atracciones':  'cultural',
+    '🎨 Museos':       'cultural',
+    '🎭 Arte':         'cultural',
+    '🎡 Ocio':         'ocio',
+    '🎬 Cines':        'ocio',
+    '🍽️ Restaurantes': 'comida',
+    '☕ Cafeterías':   'comida',
+    '🍻 Bares/Pubs':   'comida',
+    '🌿 Parques':      'aire',
+}
+DIA_INICIO = 9.0
+DIA_FIN    = 22.0
 
 # ─────────────────────────────────────────────
 #  API KEY DESDE SECRETS
@@ -207,7 +235,11 @@ def buscar_ciudades(texto):
 
 def hacer_buscador_hoteles(lat, lng):
     def _buscar(texto):
-        return _autocompletar(texto, bias_lat=lat, bias_lng=lng)
+        return _autocompletar(
+            texto,
+            tipos_tuple=('lodging',),
+            bias_lat=lat, bias_lng=lng,
+        )
     return _buscar
 
 def haversine(lat1, lng1, lat2, lng2):
@@ -241,51 +273,224 @@ def eur_to_level(eur, infinito_arriba=False):
     return 4
 
 def formato_hora(h):
+    if h is None or (isinstance(h, float) and math.isnan(h)):
+        return ''
     hh = int(h)
     mm = int(round((h - hh) * 60))
     if mm == 60:
         hh, mm = hh + 1, 0
     return f"{hh:02d}:{mm:02d}"
 
-def asignar_horas_df(df_plan):
-    """Añade columna 'hora' a df_plan distribuyendo las actividades por franjas
-    horarias según el tipo. Devuelve el df ordenado cronológicamente por día."""
-    if df_plan.empty:
-        df_plan = df_plan.copy()
-        df_plan['hora'] = pd.Series(dtype='float64')
-        return df_plan
+def tiempo_desplazamiento(lat1, lng1, lat2, lng2):
+    """Horas aproximadas entre dos puntos. A pie si ≤1.5 km, en coche/metro si no."""
+    if None in (lat1, lng1, lat2, lng2):
+        return 0.0
+    km = haversine(lat1, lng1, lat2, lng2)
+    if km == float('inf'):
+        return 0.0
+    if km <= 1.5:
+        return km / 4.0          # ~4 km/h andando
+    return km / 25.0 + 0.15      # ~25 km/h + 9 min de margen
 
+def _weekday_google(f):
+    return (f.weekday() + 1) % 7
+
+def abierto_en_dia(periods, fecha):
+    if not periods:
+        return True
+    d = _weekday_google(fecha)
+    return any(p.get('open', {}).get('day') == d for p in periods)
+
+def abierto_en_hora(periods, fecha, h_ini, h_fin):
+    """True si el lugar cubre [h_ini, h_fin] en la fecha indicada, o si no hay datos."""
+    if not periods:
+        return True
+    d = _weekday_google(fecha)
+    for p in periods:
+        op = p.get('open', {})
+        cl = p.get('close')
+        if op.get('day') != d:
+            continue
+        o_h = op.get('hour', 0) + op.get('minute', 0) / 60.0
+        if cl is None:
+            return True  # Sin cierre → 24 h
+        c_h = cl.get('hour', 24) + cl.get('minute', 0) / 60.0
+        if cl.get('day') != op.get('day'):
+            c_h += 24
+        if o_h <= h_ini and h_fin <= c_h:
+            return True
+    return False
+
+def siguiente_apertura(periods, fecha, desde_h):
+    """Devuelve la próxima hora ≥desde_h en la que abre el lugar ese día, o None."""
+    if not periods:
+        return desde_h
+    d = _weekday_google(fecha)
+    mejores = []
+    for p in periods:
+        op = p.get('open', {})
+        if op.get('day') != d:
+            continue
+        o_h = op.get('hour', 0) + op.get('minute', 0) / 60.0
+        if o_h >= desde_h:
+            mejores.append(o_h)
+        else:
+            # Si ya estamos dentro del periodo, podemos empezar desde desde_h
+            cl = p.get('close')
+            if cl is None:
+                mejores.append(desde_h)
+            else:
+                c_h = cl.get('hour', 24) + cl.get('minute', 0) / 60.0
+                if cl.get('day') != op.get('day'):
+                    c_h += 24
+                if desde_h < c_h:
+                    mejores.append(desde_h)
+    return min(mejores) if mejores else None
+
+def horario_del_dia(periods, fecha):
+    """Devuelve 'HH:MM – HH:MM[, ...]' para la fecha, o 'Cerrado' si no abre."""
+    if not periods:
+        return None  # sin datos → no mostrar
+    d = _weekday_google(fecha)
+    tramos = []
+    for p in periods:
+        op = p.get('open', {})
+        cl = p.get('close')
+        if op.get('day') != d:
+            continue
+        o = f"{op.get('hour', 0):02d}:{op.get('minute', 0):02d}"
+        if cl is None:
+            tramos.append(f"{o} – 24:00")
+            continue
+        ch = cl.get('hour', 0)
+        cm = cl.get('minute', 0)
+        if cl.get('day') != op.get('day'):
+            tramos.append(f"{o} – {ch:02d}:{cm:02d} (+1d)")
+        else:
+            tramos.append(f"{o} – {ch:02d}:{cm:02d}")
+    return ', '.join(tramos) if tramos else 'Cerrado'
+
+def _planificar_dia(grupo_df, fecha_dia, hotel_coords):
+    """Construye la agenda del día: actividades con hora_ini/hora_fin y descansos.
+    Devuelve (asignaciones, descansos).
+      asignaciones = {idx_df: (hora_ini, hora_fin)}
+      descansos    = [{'kind': 'descanso'|'traslado', 'ini': float, 'fin': float,
+                        'label': str, 'tras_idx': idx_anterior}]"""
+    # 1) Orden inicial por hora ideal del tipo
+    items = list(grupo_df.iterrows())
+    items.sort(key=lambda x: TIPO_IDEAL_HORAS.get(x[1]['tipo'], [11.0])[0])
+
+    # 2) Coherencia: evitar dos actividades de la misma categoría seguidas
+    mejora = True
+    while mejora:
+        mejora = False
+        for i in range(len(items) - 1):
+            c1 = CATEGORIA_TIPO.get(items[i][1]['tipo'])
+            c2 = CATEGORIA_TIPO.get(items[i+1][1]['tipo'])
+            if c1 == c2 and i + 2 < len(items):
+                c3 = CATEGORIA_TIPO.get(items[i+2][1]['tipo'])
+                if c3 != c1:
+                    items[i+1], items[i+2] = items[i+2], items[i+1]
+                    mejora = True
+
+    asignaciones = {}
+    descansos = []
+    reloj = DIA_INICIO
+    prev_loc = hotel_coords
+    prev_idx = None
+
+    for n, (idx, row) in enumerate(items):
+        tipo = row['tipo']
+        dur = TIPO_DURACION.get(tipo, 1.5)
+        periods = row.get('opening_periods')
+
+        # Traslado
+        if prev_loc and pd.notna(row.get('lat')) and pd.notna(row.get('lng')):
+            viaje = tiempo_desplazamiento(prev_loc[0], prev_loc[1], row['lat'], row['lng'])
+        else:
+            viaje = 0.0
+        if viaje >= 0.1:
+            descansos.append({
+                'kind': 'traslado', 'ini': reloj, 'fin': reloj + viaje,
+                'label': f'Traslado · ~{int(round(viaje * 60))} min',
+                'tras_idx': prev_idx,
+            })
+            reloj += viaje
+
+        # Esperar a hora preferida del tipo si llegamos antes
+        ideales = TIPO_IDEAL_HORAS.get(tipo, [reloj])
+        ideales_ok = [h for h in ideales if h + dur <= DIA_FIN]
+        objetivo = min((h for h in ideales_ok if h >= reloj), default=reloj)
+        if objetivo > reloj + 0.15:
+            descansos.append({
+                'kind': 'descanso', 'ini': reloj, 'fin': objetivo,
+                'label': 'Tiempo libre', 'tras_idx': prev_idx,
+            })
+            reloj = objetivo
+
+        # Respetar apertura real del día
+        apertura = siguiente_apertura(periods, fecha_dia, reloj)
+        if apertura is None:
+            # No abre ese día → lo saltamos
+            continue
+        if apertura > reloj + 0.05:
+            descansos.append({
+                'kind': 'descanso', 'ini': reloj, 'fin': apertura,
+                'label': 'Espera apertura', 'tras_idx': prev_idx,
+            })
+            reloj = apertura
+
+        # Si ya no cabe, paramos el día
+        if reloj + dur > DIA_FIN + 0.25:
+            break
+
+        ini = reloj
+        fin = reloj + dur
+        asignaciones[idx] = (ini, fin)
+        reloj = fin
+        prev_loc = (row['lat'], row['lng']) if pd.notna(row.get('lat')) else prev_loc
+        prev_idx = idx
+
+        # Descanso intermedio (no tras la última)
+        if n < len(items) - 1 and reloj < DIA_FIN - 1:
+            if tipo == '🍽️ Restaurantes' and 13 <= ini <= 15:
+                brk = 0.5   # sobremesa
+                etiq = 'Sobremesa'
+            elif dur >= 2.0:
+                brk = 0.5
+                etiq = 'Descanso'
+            else:
+                brk = 0.25
+                etiq = 'Descanso'
+            descansos.append({
+                'kind': 'descanso', 'ini': reloj, 'fin': reloj + brk,
+                'label': etiq, 'tras_idx': idx,
+            })
+            reloj += brk
+
+    return asignaciones, descansos
+
+def asignar_horas_df(df_plan, fecha_ini, hotel_coords):
+    """Añade hora_ini/hora_fin a cada actividad de df_plan y devuelve
+    (df ordenado cronológicamente, dict {dia: [descansos/traslados]})."""
     df = df_plan.copy().reset_index(drop=True)
-    df['hora'] = None
+    df['hora_ini'] = pd.NA
+    df['hora_fin'] = pd.NA
+    descansos_por_dia = {}
+
+    if df.empty:
+        return df, descansos_por_dia
 
     for dia, grupo in df.groupby('dia'):
-        n = len(grupo)
-        # Franjas base: mañana, media mañana, comida, tarde, tarde-noche, noche
-        slots = [9.5, 11.5, 13.5, 16.0, 18.5, 21.0][:max(n, 1)]
-        slots_libres = list(slots)
-        # Los tipos con franjas más estrechas eligen primero
-        idx_ordenados = sorted(
-            grupo.index,
-            key=lambda i: HORA_PREF_ORDEN.index(df.at[i, 'tipo']) if df.at[i, 'tipo'] in HORA_PREF_ORDEN else 999
-        )
-        for i in idx_ordenados:
-            tipo = df.at[i, 'tipo']
-            ideales = TIPO_IDEAL_HORAS.get(tipo, [11.0, 16.0, 18.5])
-            mejor = None
-            mejor_dist = float('inf')
-            for cand in slots_libres:
-                d = min(abs(cand - p) for p in ideales)
-                if d < mejor_dist:
-                    mejor_dist = d
-                    mejor = cand
-            if mejor is None and slots_libres:
-                mejor = slots_libres[0]
-            if mejor is not None:
-                slots_libres.remove(mejor)
-                df.at[i, 'hora'] = mejor
+        fecha_dia = fecha_ini + timedelta(days=int(dia) - 1)
+        asign, descs = _planificar_dia(grupo, fecha_dia, hotel_coords)
+        for idx, (ini, fin) in asign.items():
+            df.at[idx, 'hora_ini'] = ini
+            df.at[idx, 'hora_fin'] = fin
+        descansos_por_dia[int(dia)] = descs
 
-    df = df.sort_values(['dia', 'hora'], na_position='last').reset_index(drop=True)
-    return df
+    df = df.sort_values(['dia', 'hora_ini'], na_position='last').reset_index(drop=True)
+    return df, descansos_por_dia
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def obtener_coords(ciudad):
@@ -312,7 +517,9 @@ def buscar_lugares(lat, lng, tipo_google, radio_m):
         'locationRestriction': {
             'circle': {'center': {'latitude': lat, 'longitude': lng}, 'radius': float(radio_m)}
         },
-        'rankPreference': 'POPULARITY'
+        'rankPreference': 'POPULARITY',
+        'languageCode': 'es',
+        'regionCode': 'ES',
     }
     field_mask = ','.join([
         'places.id', 'places.displayName', 'places.rating',
@@ -362,11 +569,12 @@ def extraer(lugar, tipo_nombre):
 
 TIPO_RESTAURANTE = '🍽️ Restaurantes'
 
-def asignar_planning(df_f, dias, act_por_dia, hotel_coords, regimen):
+def asignar_planning(df_f, dias, act_por_dia, hotel_coords, regimen, fecha_ini=None):
     """Construye el planning día a día sin repetir tipo y respetando el régimen.
     Prioriza museos y atracciones sobre parques/cafés/bares (TIPO_PESO). Si hay
     hotel usa sus coords como ancla estricta; si no, usa como ancla global la
-    actividad con mayor rating·peso, para que todo el viaje se agrupe allí."""
+    actividad con mayor rating·peso, para que todo el viaje se agrupe allí.
+    Si fecha_ini se indica, filtra por apertura en el weekday de cada día."""
     if df_f.empty:
         return df_f.assign(dia=pd.Series(dtype=int))
 
@@ -402,12 +610,15 @@ def asignar_planning(df_f, dias, act_por_dia, hotel_coords, regimen):
 
     for dia in range(1, dias + 1):
         ancla_dia = hotel_coords or global_anchor
+        fecha_dia = fecha_ini + timedelta(days=dia - 1) if fecha_ini else None
 
         # Elegir actividades del día con tipos distintos, priorizando score mixto
         scored = []
         for i, row in df_f.iterrows():
             if i in used: continue
             if not puede_coger(row): continue
+            if fecha_dia is not None and not abierto_en_dia(row.get('opening_periods'), fecha_dia):
+                continue
             if ancla_dia and pd.notna(row['lat']) and pd.notna(row['lng']):
                 dist = haversine(ancla_dia[0], ancla_dia[1], row['lat'], row['lng'])
             else:
@@ -464,6 +675,7 @@ for key, default in {
     'dias_res': 3, 'act_por_dia_res': 3,
     'fechas_res': None, 'hotel_res': None, 'regimen_res': 'Solo alojamiento',
     'coords_ciudad': (None, None),
+    'descansos_dia': {},
 }.items():
     if key not in st.session_state:
         st.session_state[key] = default
@@ -623,8 +835,8 @@ if buscar:
         precio_ok
     ].drop_duplicates(subset='nombre').sort_values('rating', ascending=False).reset_index(drop=True)
 
-    df_plan = asignar_planning(df_f, dias, act_por_dia, hotel_coords, regimen)
-    df_plan = asignar_horas_df(df_plan)
+    df_plan = asignar_planning(df_f, dias, act_por_dia, hotel_coords, regimen, fecha_ini=fecha_ini)
+    df_plan, descansos_por_dia = asignar_horas_df(df_plan, fecha_ini, hotel_coords)
 
     # Guardar todo en session_state
     st.session_state.df_plan          = df_plan
@@ -636,6 +848,7 @@ if buscar:
     st.session_state.fechas_res       = (fecha_ini, fecha_fin)
     st.session_state.hotel_res        = hotel if hotel else None
     st.session_state.regimen_res      = regimen
+    st.session_state.descansos_dia    = descansos_por_dia
 
 # ─────────────────────────────────────────────
 #  MOSTRAR RESULTADOS (siempre desde session_state)
@@ -694,29 +907,68 @@ tab_planning, tab_mapa, tab_explorar = st.tabs(["📅 Planning", "🗺️ Mapa",
 # ── TAB 1: PLANNING ──────────────────────────
 with tab_planning:
     fecha_ini_res = fechas_res[0] if fechas_res else None
+    descansos_dia_map = st.session_state.get('descansos_dia') or {}
     for dia in range(1, dias_res + 1):
-        acts = df_plan[df_plan['dia'] == dia]
+        acts = df_plan[df_plan['dia'] == dia].copy()
         if acts.empty:
             continue
         if fecha_ini_res:
             fecha_dia = fecha_ini_res + timedelta(days=dia - 1)
             encabezado = f'Día {dia} · {fecha_dia.strftime("%a %d %b %Y").capitalize()}'
         else:
+            fecha_dia = None
             encabezado = f'Día {dia}'
         st.markdown(f'<div class="day-header">{encabezado}</div>', unsafe_allow_html=True)
+
+        # Intercalar actividades con descansos/traslados según orden cronológico
+        bloques_dia = []
         for _, act in acts.iterrows():
-            abierto_badge = ""
-            if act['abierto'] is True:
-                abierto_badge = '<span class="badge badge-open">Abierto ahora</span>'
-            elif act['abierto'] is False:
-                abierto_badge = '<span class="badge" style="background:#FEE2E2;color:#991B1B;">Cerrado</span>'
-            n_rev    = f"{int(act['n_reviews']):,} reseñas" if act['n_reviews'] else ""
-            desc     = f'<div class="desc">{act["descripcion"]}</div>' if act["descripcion"] else ""
-            stars    = '⭐' * int(round(act['rating']))
-            hora_html = (
-                f'<div class="hora-slot">🕐 {formato_hora(act["hora"])}</div>'
-                if pd.notna(act.get('hora')) else ''
-            )
+            bloques_dia.append(('act', act))
+        for d in descansos_dia_map.get(dia, []):
+            bloques_dia.append(('desc', d))
+        def _clave_bloque(b):
+            kind, data = b
+            if kind == 'act':
+                h = data.get('hora_ini')
+                return float(h) if pd.notna(h) else 99.0
+            return float(data['ini'])
+        bloques_dia.sort(key=_clave_bloque)
+
+        for kind, data in bloques_dia:
+            if kind == 'desc':
+                icon = '🚶' if data['kind'] == 'traslado' else '☕'
+                extra_class = ' traslado' if data['kind'] == 'traslado' else ''
+                ini_txt = formato_hora(data['ini'])
+                fin_txt = formato_hora(data['fin'])
+                mins = int(round((data['fin'] - data['ini']) * 60))
+                st.markdown(
+                    f'<div class="descanso{extra_class}">{icon} <b>{data["label"]}</b> · '
+                    f'{ini_txt} – {fin_txt} ({mins} min)</div>',
+                    unsafe_allow_html=True,
+                )
+                continue
+
+            act = data
+            n_rev = f"{int(act['n_reviews']):,} reseñas" if act['n_reviews'] else ""
+            desc  = f'<div class="desc">{act["descripcion"]}</div>' if act["descripcion"] else ""
+            stars = '⭐' * int(round(act['rating']))
+
+            if pd.notna(act.get('hora_ini')) and pd.notna(act.get('hora_fin')):
+                hora_html = (
+                    f'<div class="hora-slot">🕐 {formato_hora(act["hora_ini"])} – '
+                    f'{formato_hora(act["hora_fin"])}</div>'
+                )
+            else:
+                hora_html = ''
+
+            horario_txt = horario_del_dia(act.get('opening_periods'), fecha_dia) if fecha_dia else None
+            if horario_txt == 'Cerrado':
+                horario_badge = '<span class="badge badge-cerrado">Cerrado ese día</span>'
+            elif horario_txt:
+                horario_badge = f'<span class="badge badge-horario">🕐 {horario_txt}</span>'
+            else:
+                horario_badge = ''
+
             maps_url = (
                 f'https://www.google.com/maps/search/?api=1'
                 f'&query={quote(act["nombre"])}'
@@ -734,7 +986,7 @@ with tab_planning:
                 f'<div class="meta">📍 {act["direccion"]} &nbsp;|&nbsp; {n_rev}</div>'
                 f'<span class="badge badge-type">{act["tipo"]}</span>'
                 f'<span class="badge badge-price">{act["precio"]}</span>'
-                f'{abierto_badge}'
+                f'{horario_badge}'
                 f'<div style="margin-top:8px;">{stars} '
                 f'<span style="color:#888;font-size:0.85rem;">{act["rating"]:.1f}/5</span></div>'
                 f'{desc}'
@@ -789,7 +1041,10 @@ with tab_mapa:
         color = COLORES_DIA[(dia - 1) % len(COLORES_DIA)]
         for _, act in df_plan[df_plan['dia'] == dia].iterrows():
             if act['lat'] and act['lng']:
-                hora_txt = formato_hora(act['hora']) if pd.notna(act.get('hora')) else ''
+                if pd.notna(act.get('hora_ini')) and pd.notna(act.get('hora_fin')):
+                    hora_txt = f"{formato_hora(act['hora_ini'])} – {formato_hora(act['hora_fin'])}"
+                else:
+                    hora_txt = ''
                 hora_popup = f"🕐 {hora_txt}<br>" if hora_txt else ''
                 tooltip_prefix = f"Día {dia}" + (f" · {hora_txt}" if hora_txt else '')
                 folium.Marker(
