@@ -6,6 +6,7 @@ from streamlit_folium import st_folium
 from streamlit_searchbox import st_searchbox
 from datetime import date, timedelta
 from math import radians, cos, sin, asin, sqrt
+from urllib.parse import quote
 import time
 import math
 
@@ -45,6 +46,10 @@ h1, h2, h3 { font-family: 'DM Serif Display', serif !important; }
 .place-card h4 { margin: 0 0 4px 0; font-family: 'DM Serif Display', serif; font-size: 1.1rem; color: #1A1A2E; }
 .place-card .meta { font-size: 0.82rem; color: #888; margin-bottom: 6px; }
 .place-card .desc { font-size: 0.88rem; color: #555; line-height: 1.5; }
+.hora-slot { display: inline-block; background: #1A1A2E; color: #E8C547; font-weight: 500; padding: 4px 12px; border-radius: 8px; font-size: 0.85rem; margin-bottom: 6px; letter-spacing: 0.04em; }
+.place-card .links { margin-top: 10px; font-size: 0.85rem; }
+.place-card .links a { color: #0F3460; text-decoration: none; margin-right: 14px; }
+.place-card .links a:hover { text-decoration: underline; }
 .badge { display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 500; margin-right: 6px; }
 .badge-type  { background: #EEF2FF; color: #4338CA; }
 .badge-price { background: #ECFDF5; color: #065F46; }
@@ -101,18 +106,50 @@ PRECIO_NUM = {
 }
 TIPOS_GOOGLE = {
     '🏛️ Atracciones':  'tourist_attraction',
-    '🍽️ Restaurantes': 'restaurant',
     '🎨 Museos':       'museum',
-    '🌿 Parques':      'park',
     '🎭 Arte':         'art_gallery',
+    '🍽️ Restaurantes': 'restaurant',
+    '☕ Cafeterías':   'cafe',
+    '🍻 Bares/Pubs':   'bar',
+    '🌿 Parques':      'park',
     '🎡 Ocio':         'amusement_park',
+    '🎬 Cines':        'movie_theater',
 }
 COLORES_DIA = ['blue', 'red', 'green', 'purple', 'orange', 'darkblue', 'cadetblue']
 ICONOS_TIPO = {
-    '🏛️ Atracciones': 'star', '🍽️ Restaurantes': 'cutlery',
-    '🎨 Museos': 'book', '🌿 Parques': 'leaf',
-    '🎭 Arte': 'picture-frame', '🎡 Ocio': 'fire',
+    '🏛️ Atracciones': 'star',       '🍽️ Restaurantes': 'cutlery',
+    '🎨 Museos':       'book',       '🌿 Parques':      'leaf',
+    '🎭 Arte':         'picture',    '🎡 Ocio':         'fire',
+    '☕ Cafeterías':   'glass',      '🍻 Bares/Pubs':   'glass',
+    '🎬 Cines':        'film',
 }
+TIPO_PESO = {
+    '🏛️ Atracciones':  1.30,
+    '🎨 Museos':       1.25,
+    '🎭 Arte':         1.10,
+    '🎡 Ocio':         1.05,
+    '🎬 Cines':        1.00,
+    '🍽️ Restaurantes': 1.00,
+    '🍻 Bares/Pubs':   0.95,
+    '☕ Cafeterías':   0.90,
+    '🌿 Parques':      0.85,
+}
+TIPO_IDEAL_HORAS = {
+    '☕ Cafeterías':   [9.5, 11.0, 17.0],
+    '🎨 Museos':       [10.0, 11.5, 16.0],
+    '🏛️ Atracciones': [10.0, 11.5, 16.0, 17.5],
+    '🎭 Arte':         [11.0, 16.0],
+    '🌿 Parques':      [11.0, 16.0],
+    '🍽️ Restaurantes': [13.5, 21.0],
+    '🎡 Ocio':         [16.0, 18.5, 20.0],
+    '🎬 Cines':        [18.5, 21.0],
+    '🍻 Bares/Pubs':   [21.0, 22.5, 18.5],
+}
+HORA_PREF_ORDEN = [
+    '🍻 Bares/Pubs', '🍽️ Restaurantes', '🎬 Cines',
+    '☕ Cafeterías', '🎡 Ocio',
+    '🏛️ Atracciones', '🎨 Museos', '🎭 Arte', '🌿 Parques',
+]
 
 # ─────────────────────────────────────────────
 #  API KEY DESDE SECRETS
@@ -193,6 +230,63 @@ def abierto_en_fechas(periods, fechas):
             return True
     return False
 
+def eur_to_level(eur, infinito_arriba=False):
+    """Convierte un valor en € a price level de Google. Si infinito_arriba y eur=500, no hay tope."""
+    if infinito_arriba and eur >= 500:
+        return None
+    if eur <= 0:   return 0
+    if eur <= 50:  return 1
+    if eur <= 150: return 2
+    if eur <= 300: return 3
+    return 4
+
+def formato_hora(h):
+    hh = int(h)
+    mm = int(round((h - hh) * 60))
+    if mm == 60:
+        hh, mm = hh + 1, 0
+    return f"{hh:02d}:{mm:02d}"
+
+def asignar_horas_df(df_plan):
+    """Añade columna 'hora' a df_plan distribuyendo las actividades por franjas
+    horarias según el tipo. Devuelve el df ordenado cronológicamente por día."""
+    if df_plan.empty:
+        df_plan = df_plan.copy()
+        df_plan['hora'] = pd.Series(dtype='float64')
+        return df_plan
+
+    df = df_plan.copy().reset_index(drop=True)
+    df['hora'] = None
+
+    for dia, grupo in df.groupby('dia'):
+        n = len(grupo)
+        # Franjas base: mañana, media mañana, comida, tarde, tarde-noche, noche
+        slots = [9.5, 11.5, 13.5, 16.0, 18.5, 21.0][:max(n, 1)]
+        slots_libres = list(slots)
+        # Los tipos con franjas más estrechas eligen primero
+        idx_ordenados = sorted(
+            grupo.index,
+            key=lambda i: HORA_PREF_ORDEN.index(df.at[i, 'tipo']) if df.at[i, 'tipo'] in HORA_PREF_ORDEN else 999
+        )
+        for i in idx_ordenados:
+            tipo = df.at[i, 'tipo']
+            ideales = TIPO_IDEAL_HORAS.get(tipo, [11.0, 16.0, 18.5])
+            mejor = None
+            mejor_dist = float('inf')
+            for cand in slots_libres:
+                d = min(abs(cand - p) for p in ideales)
+                if d < mejor_dist:
+                    mejor_dist = d
+                    mejor = cand
+            if mejor is None and slots_libres:
+                mejor = slots_libres[0]
+            if mejor is not None:
+                slots_libres.remove(mejor)
+                df.at[i, 'hora'] = mejor
+
+    df = df.sort_values(['dia', 'hora'], na_position='last').reset_index(drop=True)
+    return df
+
 @st.cache_data(ttl=3600, show_spinner=False)
 def obtener_coords(ciudad):
     r = requests.post(
@@ -269,11 +363,12 @@ def extraer(lugar, tipo_nombre):
 TIPO_RESTAURANTE = '🍽️ Restaurantes'
 
 def asignar_planning(df_f, dias, act_por_dia, hotel_coords, regimen):
-    """Construye el planning día a día, sin repetir tipo y respetando el régimen.
-    Las actividades de cada día se eligen cerca del hotel si existe, o cerca
-    entre sí (usando la primera actividad del día como ancla) si no."""
+    """Construye el planning día a día sin repetir tipo y respetando el régimen.
+    Prioriza museos y atracciones sobre parques/cafés/bares (TIPO_PESO). Si hay
+    hotel usa sus coords como ancla estricta; si no, usa como ancla global la
+    actividad con mayor rating·peso, para que todo el viaje se agrupe allí."""
     if df_f.empty:
-        return df_f.assign(dia=[])
+        return df_f.assign(dia=pd.Series(dtype=int))
 
     if regimen == 'Pensión completa':
         df_f = df_f[df_f['tipo'] != TIPO_RESTAURANTE]
@@ -281,56 +376,52 @@ def asignar_planning(df_f, dias, act_por_dia, hotel_coords, regimen):
     elif regimen == 'Media pensión':
         max_rest = max(1, dias // 2)
     else:
-        max_rest = dias  # sin restricción extra: la exclusividad de tipo ya limita a 1/día
+        max_rest = dias
 
-    df_f = df_f.sort_values('rating', ascending=False).reset_index(drop=True)
+    df_f = df_f.copy()
+    df_f['peso'] = df_f['tipo'].map(TIPO_PESO).fillna(1.0)
+    df_f['pts']  = df_f['rating'].fillna(0) * df_f['peso']
+    df_f = df_f.sort_values('pts', ascending=False).reset_index(drop=True)
+
+    # Ancla global si no hay hotel: la mejor puntuación del pool (con coords)
+    global_anchor = None
+    if not hotel_coords:
+        con_coords = df_f.dropna(subset=['lat', 'lng'])
+        if not con_coords.empty:
+            top = con_coords.iloc[0]
+            global_anchor = (top['lat'], top['lng'])
+
+    dist_penalty = 0.25 if hotel_coords else 0.20
+
     used = set()
     rest_count = 0
-    asignaciones = []  # (idx_df, dia)
+    asignaciones = []
 
     def puede_coger(row):
         return not (row['tipo'] == TIPO_RESTAURANTE and rest_count >= max_rest)
 
     for dia in range(1, dias + 1):
-        # Ancla del día: la mejor puntuación disponible
-        anchor = None
-        for i, row in df_f.iterrows():
-            if i in used: continue
-            if not puede_coger(row): continue
-            anchor = i
-            break
-        if anchor is None:
-            break
+        ancla_dia = hotel_coords or global_anchor
 
-        tipos_dia = {df_f.at[anchor, 'tipo']}
-        seleccion = [anchor]
-        used.add(anchor)
-        if df_f.at[anchor, 'tipo'] == TIPO_RESTAURANTE:
-            rest_count += 1
-
-        if hotel_coords:
-            a_lat, a_lng = hotel_coords
-        else:
-            a_lat, a_lng = df_f.at[anchor, 'lat'], df_f.at[anchor, 'lng']
-
-        # Candidatos restantes con score mixto (rating + cercanía)
+        # Elegir actividades del día con tipos distintos, priorizando score mixto
         scored = []
         for i, row in df_f.iterrows():
             if i in used: continue
-            if row['tipo'] in tipos_dia: continue
             if not puede_coger(row): continue
-            dist = haversine(a_lat, a_lng, row['lat'], row['lng'])
-            score = (row['rating'] or 0) - 0.15 * dist
-            scored.append((score, i))
+            if ancla_dia and pd.notna(row['lat']) and pd.notna(row['lng']):
+                dist = haversine(ancla_dia[0], ancla_dia[1], row['lat'], row['lng'])
+            else:
+                dist = 0
+            scored.append((row['pts'] - dist_penalty * dist, i))
         scored.sort(reverse=True)
 
+        seleccion = []
+        tipos_dia = set()
         for _, i in scored:
             if len(seleccion) >= act_por_dia:
                 break
             tipo_i = df_f.at[i, 'tipo']
             if tipo_i in tipos_dia:
-                continue
-            if not puede_coger(df_f.loc[i]):
                 continue
             seleccion.append(i)
             tipos_dia.add(tipo_i)
@@ -338,16 +429,19 @@ def asignar_planning(df_f, dias, act_por_dia, hotel_coords, regimen):
             if tipo_i == TIPO_RESTAURANTE:
                 rest_count += 1
 
-        # Si no llegamos al objetivo por falta de tipos distintos, relajamos la regla
+        # Relajar exclusividad de tipo si no llegamos al objetivo
         if len(seleccion) < act_por_dia:
-            for i, row in df_f.iterrows():
+            for _, i in scored:
                 if len(seleccion) >= act_por_dia: break
                 if i in used: continue
-                if not puede_coger(row): continue
+                if not puede_coger(df_f.loc[i]): continue
                 seleccion.append(i)
                 used.add(i)
-                if row['tipo'] == TIPO_RESTAURANTE:
+                if df_f.at[i, 'tipo'] == TIPO_RESTAURANTE:
                     rest_count += 1
+
+        if not seleccion:
+            break
 
         for i in seleccion:
             asignaciones.append((i, dia))
@@ -357,7 +451,7 @@ def asignar_planning(df_f, dias, act_por_dia, hotel_coords, regimen):
 
     indices = [i for i, _ in asignaciones]
     dias_col = [d for _, d in asignaciones]
-    df_plan = df_f.loc[indices].copy()
+    df_plan = df_f.loc[indices].drop(columns=['peso', 'pts']).copy()
     df_plan['dia'] = dias_col
     return df_plan.reset_index(drop=True)
 
@@ -434,25 +528,18 @@ with st.sidebar:
     act_por_dia = st.number_input("Actividades por día", min_value=1, max_value=6, value=3)
 
     st.markdown("### 💰 Presupuesto")
-    PRESUPUESTO_RANGOS = {
-        'Hasta 50 €':  1,
-        '50 – 150 €': 2,
-        '150 – 300 €': 3,
-        '300 – 500 €': 4,
-        '+500 €':      None,
-    }
-    presupuesto = st.select_slider(
-        "Rango de gasto por persona / día",
-        options=list(PRESUPUESTO_RANGOS.keys()),
-        value='150 – 300 €',
+    precio_min_eur, precio_max_eur = st.slider(
+        "Rango por persona / día (€)",
+        min_value=0, max_value=500, value=(50, 300), step=25,
     )
-    presupuesto_max = PRESUPUESTO_RANGOS[presupuesto]
+    txt_max = "+500 € (sin límite)" if precio_max_eur == 500 else f"{precio_max_eur} €"
+    st.caption(f"💰 Desde {precio_min_eur} €  →  hasta {txt_max}")
 
     st.markdown("### 🎯 Preferencias")
     gustos = st.multiselect(
         "Tipos de lugar",
         options=list(TIPOS_GOOGLE.keys()),
-        default=['🏛️ Atracciones', '🍽️ Restaurantes', '🌿 Parques'],
+        default=['🏛️ Atracciones', '🎨 Museos', '🍽️ Restaurantes', '☕ Cafeterías'],
     )
     if not gustos:
         gustos = list(TIPOS_GOOGLE.keys())
@@ -523,18 +610,21 @@ if buscar:
     df['abierto_en_fechas'] = df['opening_periods'].apply(
         lambda p: abierto_en_fechas(p, fechas_viaje)
     )
+    precio_min_lvl = eur_to_level(precio_min_eur)
+    precio_max_lvl = eur_to_level(precio_max_eur, infinito_arriba=True)
+    precio_ok = df['precio_num'].isna() | (
+        (df['precio_num'] >= precio_min_lvl) &
+        ((df['precio_num'] <= (precio_max_lvl if precio_max_lvl is not None else 4)))
+    )
     df_f = df[
         (df['rating'].notna()) &
         (df['rating'] >= rating_min) &
         df['abierto_en_fechas'] &
-        (
-            (df['precio_num'].isna()) |
-            (presupuesto_max is None) |
-            (df['precio_num'] <= presupuesto_max)
-        )
+        precio_ok
     ].drop_duplicates(subset='nombre').sort_values('rating', ascending=False).reset_index(drop=True)
 
     df_plan = asignar_planning(df_f, dias, act_por_dia, hotel_coords, regimen)
+    df_plan = asignar_horas_df(df_plan)
 
     # Guardar todo en session_state
     st.session_state.df_plan          = df_plan
@@ -620,11 +710,26 @@ with tab_planning:
                 abierto_badge = '<span class="badge badge-open">Abierto ahora</span>'
             elif act['abierto'] is False:
                 abierto_badge = '<span class="badge" style="background:#FEE2E2;color:#991B1B;">Cerrado</span>'
-            n_rev = f"{int(act['n_reviews']):,} reseñas" if act['n_reviews'] else ""
-            desc  = f'<div class="desc">{act["descripcion"]}</div>' if act["descripcion"] else ""
-            stars = '⭐' * int(round(act['rating']))
+            n_rev    = f"{int(act['n_reviews']):,} reseñas" if act['n_reviews'] else ""
+            desc     = f'<div class="desc">{act["descripcion"]}</div>' if act["descripcion"] else ""
+            stars    = '⭐' * int(round(act['rating']))
+            hora_html = (
+                f'<div class="hora-slot">🕐 {formato_hora(act["hora"])}</div>'
+                if pd.notna(act.get('hora')) else ''
+            )
+            maps_url = (
+                f'https://www.google.com/maps/search/?api=1'
+                f'&query={quote(act["nombre"])}'
+                f'&query_place_id={act["place_id"]}'
+            )
+            links_html = (
+                f'<div class="links">'
+                f'<a href="{maps_url}" target="_blank" rel="noopener">🗺️ Ver en Google Maps</a>'
+                f'</div>'
+            )
             st.markdown(
                 f'<div class="place-card">'
+                f'{hora_html}'
                 f'<h4>{act["nombre"]}</h4>'
                 f'<div class="meta">📍 {act["direccion"]} &nbsp;|&nbsp; {n_rev}</div>'
                 f'<span class="badge badge-type">{act["tipo"]}</span>'
@@ -633,27 +738,36 @@ with tab_planning:
                 f'<div style="margin-top:8px;">{stars} '
                 f'<span style="color:#888;font-size:0.85rem;">{act["rating"]:.1f}/5</span></div>'
                 f'{desc}'
+                f'{links_html}'
                 f'</div>',
                 unsafe_allow_html=True,
             )
 
-            with st.expander(f"Ver reviews de {act['nombre']}"):
-                with st.spinner("Cargando reviews..."):
+            with st.expander(f"Más detalles de {act['nombre']}"):
+                with st.spinner("Cargando detalles..."):
                     det = obtener_detalles(act['place_id'])
+                web = det.get('websiteUri')
+                tel = det.get('nationalPhoneNumber')
+                if web:
+                    st.markdown(f"**🌐 Web:** [{web}]({web})")
+                if tel:
+                    st.markdown(f"**📞 Teléfono:** {tel}")
                 reviews = det.get('reviews', [])
                 if not reviews:
                     st.info("No hay reviews disponibles.")
                 for rev in reviews[:5]:
-                    autor  = rev.get('authorAttribution', {}).get('displayName', 'Anónimo')
-                    texto  = rev.get('text', {}).get('text', '')
-                    stars  = int(rev.get('rating', 0))
-                    tiempo = rev.get('relativePublishTimeDescription', '')
-                    st.markdown(f"""
-                    <div class="review-box">
-                        <div class="author">{'⭐' * stars} {autor} <span style="color:#aaa;font-weight:300;">· {tiempo}</span></div>
-                        {texto[:400]}
-                    </div>
-                    """, unsafe_allow_html=True)
+                    autor   = rev.get('authorAttribution', {}).get('displayName', 'Anónimo')
+                    texto   = rev.get('text', {}).get('text', '')
+                    n_stars = int(rev.get('rating', 0))
+                    tiempo  = rev.get('relativePublishTimeDescription', '')
+                    st.markdown(
+                        f'<div class="review-box">'
+                        f'<div class="author">{"⭐" * n_stars} {autor} '
+                        f'<span style="color:#aaa;font-weight:300;">· {tiempo}</span></div>'
+                        f'{texto[:400]}'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
                 horarios = det.get('regularOpeningHours', {}).get('weekdayDescriptions', [])
                 if horarios:
                     st.markdown("**🕐 Horarios:**")
@@ -675,14 +789,17 @@ with tab_mapa:
         color = COLORES_DIA[(dia - 1) % len(COLORES_DIA)]
         for _, act in df_plan[df_plan['dia'] == dia].iterrows():
             if act['lat'] and act['lng']:
+                hora_txt = formato_hora(act['hora']) if pd.notna(act.get('hora')) else ''
+                hora_popup = f"🕐 {hora_txt}<br>" if hora_txt else ''
+                tooltip_prefix = f"Día {dia}" + (f" · {hora_txt}" if hora_txt else '')
                 folium.Marker(
                     location=[act['lat'], act['lng']],
                     popup=folium.Popup(
-                        f"<b>{act['nombre']}</b><br>Día {dia} · {act['tipo']}<br>"
+                        f"<b>{act['nombre']}</b><br>{hora_popup}Día {dia} · {act['tipo']}<br>"
                         f"⭐ {act['rating']} · {act['precio']}<br>📍 {act['direccion']}",
                         max_width=260
                     ),
-                    tooltip=f"Día {dia}: {act['nombre']}",
+                    tooltip=f"{tooltip_prefix}: {act['nombre']}",
                     icon=folium.Icon(color=color, icon=ICONOS_TIPO.get(act['tipo'], 'info-sign'), prefix='glyphicon')
                 ).add_to(grupo)
         grupo.add_to(mapa)
@@ -712,6 +829,11 @@ with tab_explorar:
         n_rev = f"{int(row['n_reviews']):,} reseñas" if row['n_reviews'] else ""
         desc  = f'<div class="desc">{row["descripcion"]}</div>' if row["descripcion"] else ""
         stars = '⭐' * int(round(row['rating']))
+        maps_url = (
+            f'https://www.google.com/maps/search/?api=1'
+            f'&query={quote(row["nombre"])}'
+            f'&query_place_id={row["place_id"]}'
+        )
         st.markdown(
             f'<div class="place-card">'
             f'<h4>{row["nombre"]}</h4>'
@@ -721,6 +843,9 @@ with tab_explorar:
             f'<div style="margin-top:8px;">{stars} '
             f'<span style="color:#888;font-size:0.85rem;">{row["rating"]:.1f}/5</span></div>'
             f'{desc}'
+            f'<div class="links">'
+            f'<a href="{maps_url}" target="_blank" rel="noopener">🗺️ Ver en Google Maps</a>'
+            f'</div>'
             f'</div>',
             unsafe_allow_html=True,
         )
