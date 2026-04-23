@@ -182,19 +182,22 @@ def get_headers(field_mask):
     }
 
 @st.cache_data(ttl=600, show_spinner=False)
-def _autocompletar(texto, tipos_tuple=None, bias_lat=None, bias_lng=None):
+def _autocompletar(texto, tipos_tuple=None, bias_lat=None, bias_lng=None,
+                   strict_location=False, radio_m=30000.0):
     if not texto or len(texto.strip()) < 2 or not API_KEY:
         return []
     body = {'input': texto, 'languageCode': 'es'}
     if tipos_tuple:
         body['includedPrimaryTypes'] = list(tipos_tuple)
     if bias_lat is not None and bias_lng is not None:
-        body['locationBias'] = {
-            'circle': {
-                'center': {'latitude': bias_lat, 'longitude': bias_lng},
-                'radius': 30000.0,
-            }
+        circle = {
+            'center': {'latitude': bias_lat, 'longitude': bias_lng},
+            'radius': float(radio_m),
         }
+        if strict_location:
+            body['locationRestriction'] = {'circle': circle}
+        else:
+            body['locationBias'] = {'circle': circle}
     try:
         r = requests.post(
             AUTOCOMPLETE_URL,
@@ -218,11 +221,16 @@ def buscar_ciudades(texto):
     return _autocompletar(texto, tipos_tuple=('(cities)',))
 
 def hacer_buscador_hoteles(lat, lng):
+    """Sugiere alojamientos Y direcciones estrictamente dentro de la ciudad
+    (radio 15 km). Permite tanto hoteles como direcciones/Airbnbs."""
     def _buscar(texto):
+        if lat is None or lng is None:
+            return []
         return _autocompletar(
             texto,
-            tipos_tuple=('lodging',),
             bias_lat=lat, bias_lng=lng,
+            strict_location=True,
+            radio_m=15000.0,
         )
     return _buscar
 
@@ -454,6 +462,42 @@ def _planificar_dia(grupo_df, fecha_dia, hotel_coords):
 
     return asignaciones, descansos
 
+def swap_actividad(df_plan, df_todos, place_id):
+    """Sustituye la actividad place_id por otra del mismo tipo del pool df_todos
+    que no esté ya en df_plan. Devuelve (df_plan_nuevo, nombre_nuevo) o (None, None)
+    si no hay candidato. No recalcula horas: hazlo después con asignar_horas_df."""
+    if df_plan is None or df_todos is None or df_plan.empty:
+        return None, None
+    fila = df_plan[df_plan['place_id'] == place_id]
+    if fila.empty:
+        return None, None
+    actual = fila.iloc[0]
+    tipo_actual = actual['tipo']
+    dia = int(actual['dia'])
+
+    usados = set(df_plan['place_id'].tolist())
+    candidatos = df_todos[
+        (df_todos['tipo'] == tipo_actual) &
+        (~df_todos['place_id'].isin(usados))
+    ].sort_values('rating', ascending=False)
+    if candidatos.empty:
+        return None, None
+
+    nuevo = candidatos.iloc[0]
+    # Copiamos el nuevo con las columnas esperadas por df_plan
+    fila_nueva = {col: nuevo[col] if col in nuevo.index else None for col in df_plan.columns}
+    fila_nueva['dia'] = dia
+    fila_nueva['hora_ini'] = pd.NA
+    fila_nueva['hora_fin'] = pd.NA
+
+    df_nuevo = df_plan[df_plan['place_id'] != place_id].copy()
+    df_nuevo = pd.concat([df_nuevo, pd.DataFrame([fila_nueva])], ignore_index=True)
+    # Invalidamos horas del día afectado para que se recalcule limpio
+    df_nuevo.loc[df_nuevo['dia'] == dia, 'hora_ini'] = pd.NA
+    df_nuevo.loc[df_nuevo['dia'] == dia, 'hora_fin'] = pd.NA
+    df_nuevo = df_nuevo.sort_values(['dia']).reset_index(drop=True)
+    return df_nuevo, nuevo['nombre']
+
 def asignar_horas_df(df_plan, fecha_ini, hotel_coords):
     """Añade hora_ini/hora_fin a cada actividad de df_plan y devuelve
     (df ordenado cronológicamente, dict {dia: [descansos/traslados]})."""
@@ -660,6 +704,7 @@ for key, default in {
     'fechas_res': None, 'hotel_res': None, 'regimen_res': 'Solo alojamiento',
     'coords_ciudad': (None, None),
     'descansos_dia': {},
+    'hotel_coords_res': None,
 }.items():
     if key not in st.session_state:
         st.session_state[key] = default
@@ -691,13 +736,19 @@ with st.sidebar:
             st.session_state.coords_ciudad = (lat_ciudad, lng_ciudad)
 
     st.markdown("### 🏨 Alojamiento (opcional)")
-    hotel = st_searchbox(
-        hacer_buscador_hoteles(lat_ciudad, lng_ciudad),
-        key="hotel_sb",
-        placeholder="Nombre del hotel o dirección…",
-        label="Hotel / dirección",
-        clear_on_submit=False,
-    )
+    hotel = None
+    if lat_ciudad is not None and lng_ciudad is not None:
+        # Clave ligada a la ciudad → al cambiar de ciudad se resetea la selección
+        hotel = st_searchbox(
+            hacer_buscador_hoteles(lat_ciudad, lng_ciudad),
+            key=f"hotel_sb_{ciudad}",
+            placeholder="Hotel, hostal o dirección (Airbnb)…",
+            label="Hotel / dirección (en la ciudad elegida)",
+            clear_on_submit=False,
+        )
+    else:
+        st.caption("⬅ Primero elige una ciudad para poder buscar alojamiento allí.")
+
     regimen = st.radio(
         "Régimen",
         options=['Solo alojamiento', 'Media pensión', 'Pensión completa'],
@@ -831,6 +882,7 @@ if buscar:
     st.session_state.act_por_dia_res  = act_por_dia
     st.session_state.fechas_res       = (fecha_ini, fecha_fin)
     st.session_state.hotel_res        = hotel if hotel else None
+    st.session_state.hotel_coords_res = hotel_coords
     st.session_state.regimen_res      = regimen
     st.session_state.descansos_dia    = descansos_por_dia
 
@@ -978,6 +1030,29 @@ with tab_planning:
                 f'</div>',
                 unsafe_allow_html=True,
             )
+
+            col_btn, _ = st.columns([2, 5])
+            with col_btn:
+                if st.button(
+                    f"🔄 Cambiar por otra de {act['tipo']}",
+                    key=f"swap_{dia}_{act['place_id']}",
+                    use_container_width=True,
+                ):
+                    df_nuevo, nombre_nuevo = swap_actividad(
+                        st.session_state.df_plan,
+                        st.session_state.df_todos,
+                        act['place_id'],
+                    )
+                    if df_nuevo is None:
+                        st.warning(f"No hay más lugares disponibles de tipo {act['tipo']}.")
+                    else:
+                        fi = st.session_state.fechas_res[0] if st.session_state.fechas_res else None
+                        hc = st.session_state.hotel_coords_res
+                        df_act, descs = asignar_horas_df(df_nuevo, fi, hc)
+                        st.session_state.df_plan = df_act
+                        st.session_state.descansos_dia = descs
+                        st.toast(f"Cambiado por «{nombre_nuevo}»", icon="🔄")
+                        st.rerun()
 
             with st.expander(f"Más detalles de {act['nombre']}"):
                 with st.spinner("Cargando detalles..."):
