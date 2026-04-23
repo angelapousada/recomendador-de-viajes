@@ -849,17 +849,17 @@ with st.sidebar:
 
     st.markdown("### Preferencias")
     gustos = st.multiselect(
+        "Actividades a elegir",
         options=list(TIPOS_GOOGLE.keys()),
         default=['Turismo', 'Cafeterías'],
+        label_visibility="collapsed",
     )
     if not gustos:
         gustos = list(TIPOS_GOOGLE.keys())
+        
+    rating_min = st.slider("Puntuación mínima", 1.0, 5.0, 4.0, 0.1, label_visibility="collapsed")
 
-    st.markdown("### Puntuación mínima")
-    rating_min = st.slider("", 1.0, 5.0, 4.0, 0.1)
-
-    st.markdown("### Radio de búsqueda (km)")
-    radio_km   = st.slider("", 1, 20, 5)
+    radio_km   = st.slider("Radio de búsqueda", 1, 20, 5, label_visibility="collapsed")
 
     st.markdown("---")
     buscar = st.button("Generar Itinerario")
