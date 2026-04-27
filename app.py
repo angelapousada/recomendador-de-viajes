@@ -871,7 +871,7 @@ with st.sidebar:
 st.markdown("""
 <div class="hero">
     <h1>Planifica tu viaje perfecto</h1>
-    <p>Recomendaciones personalizadas basadas en ratings reales, adaptadas a tu presupuesto y gustos.</p>
+    <p>Recomendaciones personalizadas basadas en puntuaciones reales, adaptadas a tu presupuesto y gustos.</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -991,7 +991,7 @@ if hotel_res:
     resumen_partes.append(f"Alojamiento: <b>{hotel_res}</b>")
 resumen_partes.append(f"Régimen: <b>{regimen_res}</b>")
 resumen_partes.append(
-    f"Rating medio <b>{df_plan['rating'].mean():.1f}/5</b>"
+    f"Puntuación media <b>{df_plan['rating'].mean():.1f}/5</b>"
 )
 st.markdown(
     f'<div class="viaje-resumen">{"  ·  ".join(resumen_partes)}</div>',
@@ -1075,7 +1075,7 @@ with tab_planning:
                         f'<span class="badge badge-price">{act["precio"]}</span>'
                         f'{horario_badge}'
                         f'<div style="margin-top:8px;color:#555;font-size:0.9rem;">'
-                        f'Rating: <b>{act["rating"]:.1f}/5</b></div>'
+                        f'Puntuación: <b>{act["rating"]:.1f}/5</b></div>'
                         f'{desc}',
                         unsafe_allow_html=True,
                     )
@@ -1159,7 +1159,7 @@ with tab_mapa:
                     location=[act['lat'], act['lng']],
                     popup=folium.Popup(
                         f"<b>{act['nombre']}</b><br>{hora_popup}Día {dia} · {act['tipo']}<br>"
-                        f"Rating {act['rating']} · {act['precio']}<br>{act['direccion']}",
+                        f"Puntuación {act['rating']} · {act['precio']}<br>{act['direccion']}",
                         max_width=260
                     ),
                     tooltip=f"{tooltip_prefix}: {act['nombre']}",
@@ -1178,14 +1178,14 @@ with tab_explorar:
     with col_f1:
         tipo_filtro = st.selectbox("Filtrar por tipo", ['Todos'] + list(df_todos['tipo'].unique()))
     with col_f2:
-        orden = st.selectbox("Ordenar por", ['Rating (mayor)', 'Rating (menor)', 'Nº reseñas'])
+        orden = st.selectbox("Ordenar por", ['Puntuación (mayor)', 'Puntuación (menor)', 'Nº reseñas'])
 
     df_vista = df_todos.copy()
     if tipo_filtro != 'Todos':
         df_vista = df_vista[df_vista['tipo'] == tipo_filtro]
     df_vista = df_vista.sort_values(
-        'rating' if 'Rating' in orden else 'n_reviews',
-        ascending=orden == 'Rating (menor)'
+        'rating' if 'Puntuación' in orden else 'n_reviews',
+        ascending=orden == 'Puntuación (menor)'
     )
 
     for _, row in df_vista.iterrows():
@@ -1203,7 +1203,7 @@ with tab_explorar:
             f'<div class="meta">{row["direccion"]} &nbsp;|&nbsp; {n_rev}</div>'
             f'<span class="badge badge-type">{row["tipo"]}</span>'
             f'<span class="badge badge-price">{row["precio"]}</span>'
-            f'<div class="rating-line">Rating: <b>{row["rating"]:.1f}/5</b></div>'
+            f'<div class="rating-line">Puntuación: <b>{row["rating"]:.1f}/5</b></div>'
             f'{desc}'
             f'</div>',
             unsafe_allow_html=True,
